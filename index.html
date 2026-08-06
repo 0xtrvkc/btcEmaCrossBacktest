@@ -284,11 +284,11 @@ tr:hover td{background:var(--surface-2);}
         <div class="suffix-wrap"><span>%</span><input type="number" id="inSizing" value="100" min="1" max="100" step="1"></div>
       </div>
       <div class="field">
-        <label>EMA Fast <span class="info-icon" title="Fast exponential moving average lookback, in calendar days. Default 50. Automatically converted to the correct bar count for the active chart timeframe (1H/4H/1D), so this always means a 50-day EMA.">i</span></label>
+        <label>EMA Fast <span class="info-icon" title="Fast exponential moving average lookback, in days. Default 50.">i</span></label>
         <input type="number" id="inEmaFast" value="50" min="2" max="300" step="1">
       </div>
       <div class="field">
-        <label>EMA Slow <span class="info-icon" title="Slow exponential moving average lookback, in calendar days. Default 200. Automatically converted to the correct bar count for the active chart timeframe (1H/4H/1D), so this always means a 200-day EMA.">i</span></label>
+        <label>EMA Slow <span class="info-icon" title="Slow exponential moving average lookback, in days. Default 200.">i</span></label>
         <input type="number" id="inEmaSlow" value="200" min="5" max="500" step="1">
       </div>
       <div class="field">
@@ -496,10 +496,6 @@ const TF_URLS = {
   '1d': BASE_URL + 'btc_daily_price.json'
 };
 const TF_LABELS = { '1h':'HOURLY', '4h':'4-HOUR', '1d':'DAILY' };
-// EMA period inputs are always specified in calendar days. Since bar spacing changes
-// with timeframe, the period fed into computeEMA (a bar count) must be scaled up
-// accordingly so "EMA 50" means the same 50-day lookback on 1H, 4H, and 1D charts.
-const BARS_PER_DAY = { '1h':24, '4h':6, '1d':1 };
 const HALVING_DATES = [
   { date:'2012-11-28', label:'1st Halving' },
   { date:'2016-07-09', label:'2nd Halving' },
@@ -721,29 +717,18 @@ function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosi
 
   const cagr = (finalEquity>0 && cfg.initialCapital>0) ? Math.pow(finalEquity/cfg.initialCapital, 1/years)-1 : null;
 
-  // Arithmetic annualized return: mean of each calendar year's return, annualized.
-  // The first year (partial, from startIndex) and the current year (partial, through
-  // the last bar) don't span a full 365 days, so their raw returns aren't comparable
-  // to a full year's — each is geometrically annualized to a 365-day-equivalent rate
-  // before averaging, using the actual number of days that year contributed.
+  // arithmetic annualized return: mean of calendar-year returns
   const yearMap = new Map();
   for (let i=startIndex;i<n;i++){
     const y = dates[i].slice(0,4);
-    if (!yearMap.has(y)) yearMap.set(y, {first:equity[i], firstDate:dates[i], last:equity[i], lastDate:dates[i]});
-    else { const rec = yearMap.get(y); rec.last = equity[i]; rec.lastDate = dates[i]; }
+    if (!yearMap.has(y)) yearMap.set(y, {first:equity[i], last:equity[i]});
+    else yearMap.get(y).last = equity[i];
   }
-  const MIN_DAYS_TO_ANNUALIZE = 5; // years with less span than this are too noisy to extrapolate
   const yearReturns = [];
-  yearMap.forEach(rec=>{
-    if (rec.first <= 0) return;
-    const rawReturn = rec.last/rec.first - 1;
-    const spanDays = Math.max(daysBetween(rec.firstDate, rec.lastDate), 0);
-    if (spanDays < MIN_DAYS_TO_ANNUALIZE) return; // skip: too little data in this year to extrapolate safely
-    const yearFrac = spanDays/365.25;
-    // geometric annualization of that year's actual return, guarding against a
-    // total-loss (rawReturn <= -1) year which can't be raised to a fractional power
-    const annualized = rawReturn <= -1 ? -1 : Math.pow(1+rawReturn, 1/yearFrac) - 1;
-    yearReturns.push(annualized);
+  const yKeys = [...yearMap.keys()];
+  yKeys.forEach((y,idx)=>{
+    const rec = yearMap.get(y);
+    if (rec.first>0) yearReturns.push(rec.last/rec.first - 1);
   });
   const annualizedReturn = yearReturns.length ? yearReturns.reduce((a,b)=>a+b,0)/yearReturns.length : null;
 
@@ -898,11 +883,8 @@ function recompute(){
   if (cfg.emaFast >= cfg.emaSlow){
     // guard: force fast < slow visually but don't hard block; just warn softly via console
   }
-  const barsPerDay = BARS_PER_DAY[state.timeframe] || 1;
-  const emaFastBars = Math.max(2, Math.round(cfg.emaFast * barsPerDay));
-  const emaSlowBars = Math.max(3, Math.round(cfg.emaSlow * barsPerDay));
-  const emaFast = computeEMA(RAW.prices, emaFastBars);
-  const emaSlow = computeEMA(RAW.prices, emaSlowBars);
+  const emaFast = computeEMA(RAW.prices, cfg.emaFast);
+  const emaSlow = computeEMA(RAW.prices, cfg.emaSlow);
   const signals = generateSignals(emaFast, emaSlow);
 
   let startIndex = emaSlow.findIndex(v=>v!=null);
@@ -1170,7 +1152,7 @@ function renderMetrics(){
   $('grpReturn').innerHTML = [
     metricCard('Final Equity', fmtUSDFull(m.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg'),
     metricCard('CAGR', fmtSignedPct(m.cagr), 'compound annual growth rate', m.cagr>=0?'pos':'neg', 'Geometric compound annual growth rate over the full backtest period: (Final/Initial)^(1/years) − 1.'),
-    metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year\'s return, with partial years (the first and current year) geometrically annualized to a 365-day-equivalent rate first — distinct from CAGR, which compounds the whole period geometrically.'),
+    metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year return — distinct from CAGR, which compounds geometrically.'),
     metricCard('Years of Investment', m.years.toFixed(2)+' yrs'),
     metricCard('Rolling 1Y Return', fmtSignedPct(lastValid(lastResult.rollStrat)), 'trailing 365d, latest', lastValid(lastResult.rollStrat)>=0?'pos':'neg', 'Strategy return over the most recent 365-day trailing window.')
   ].join('');
