@@ -258,6 +258,10 @@ tr:hover td{background:var(--surface-2);}
       <span class="ticker-label">AS OF</span>
       <span class="ticker-val num" id="tkDate" style="font-size:13px;">—</span>
     </div>
+    <div class="ticker-cell">
+      <span class="ticker-label">MVRV / ZONE</span>
+      <span class="ticker-val num" id="tkMvrv" style="font-size:13px;">—</span>
+    </div>
   </div>
 
   <!-- ============ CONTROLS ============ -->
@@ -295,6 +299,45 @@ tr:hover td{background:var(--surface-2);}
         <label>Backtest Start <span class="info-icon" title="Earliest date the backtest may begin. Actual start is whichever is later: this date, or the day the slow EMA first becomes valid.">i</span></label>
         <input type="date" id="inStartDate" value="2012-01-01">
       </div>
+    </div>
+  </div>
+
+  <!-- ============ MVRV REGIME FILTER ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--violet)"></span> MVRV REGIME FILTER</div>
+      <div class="chart-tools">
+        <span class="mono" id="mvrvNowLabel" style="font-size:12px; color:var(--violet); font-weight:700;">—</span>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-mvrvmode="off">Off</button>
+      <button class="tab-btn" data-mvrvmode="gate">Gate</button>
+      <button class="tab-btn" data-mvrvmode="scale">Scale</button>
+    </div>
+    <div class="controls-grid" style="grid-template-columns:repeat(4,1fr); margin-top:14px;">
+      <div class="field">
+        <label>Long Reduce Above <span class="info-icon" title="Gate: blocks new long entries once MVRV is above this. Scale: size begins tapering down above this level.">i</span></label>
+        <input type="number" id="inMvrvLongReduce" value="2.0" min="0" max="10" step="0.1">
+      </div>
+      <div class="field">
+        <label>Long Exit Above <span class="info-icon" title="Force-closes an open long the moment MVRV crosses above this, even without an EMA death cross. Historically every cycle top has occurred with MVRV between ~2.7 and ~8.">i</span></label>
+        <input type="number" id="inMvrvLongExit" value="3.0" min="0" max="10" step="0.1">
+      </div>
+      <div class="field">
+        <label>Short Reduce Below <span class="info-icon" title="Gate: blocks new short entries once MVRV is below this. Scale: short size begins tapering down below this level.">i</span></label>
+        <input type="number" id="inMvrvShortReduce" value="1.2" min="0" max="10" step="0.1">
+      </div>
+      <div class="field">
+        <label>Short Exit Below <span class="info-icon" title="Force-closes an open short the moment MVRV crosses below this. Historically every cycle bottom has occurred with MVRV between ~0.4 and ~1.1.">i</span></label>
+        <input type="number" id="inMvrvShortExit" value="0.7" min="0" max="10" step="0.1">
+      </div>
+    </div>
+    <div class="notes" style="margin-top:12px;">
+      <b>Gate</b> — blocks new entries once MVRV is past the "Reduce" threshold; force-exits open positions past the "Exit" threshold. Binary on/off.<br>
+      <b>Scale</b> — linearly tapers position size between the Reduce and Exit thresholds (100% → 0%) instead of a hard cutoff; still force-exits past the Exit threshold.<br>
+      <b>Why</b> — EMA cross is a lagging trend signal; MVRV is a valuation regime signal derived from on-chain cost basis, largely independent of price action alone. Gating entries by valuation avoids buying strength late in a euphoric MVRV zone and avoids shorting strength late in a capitulation MVRV zone.<br>
+      <b>Caution</b> — thresholds above are calibrated against only 4 completed BTC cycles (see MVRV summary export). Treat this as a risk overlay, not an optimized parameter — validate any threshold change out-of-sample before trusting the backtested edge.
     </div>
   </div>
 
@@ -365,6 +408,20 @@ tr:hover td{background:var(--surface-2);}
     </div>
   </div>
 
+  <!-- ============ MVRV CHART ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--violet)"></span> MVRV VALUATION</div>
+    </div>
+    <div class="chart-box short"><canvas id="mvrvChart"></canvas></div>
+    <div class="legend-row">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span> MVRV</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--red); opacity:.7"></span> Long Exit / Short Exit thresholds</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--amber); opacity:.7"></span> Long Reduce / Short Reduce thresholds</div>
+      <div class="legend-item" style="color:var(--text-faint)">Market value / realized value — on-chain cost-basis ratio</div>
+    </div>
+  </div>
+
   <!-- ============ PORTFOLIO GROWTH ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -400,6 +457,9 @@ tr:hover td{background:var(--surface-2);}
 
     <div class="metric-section-label">Timing &amp; Streaks</div>
     <div class="metrics-grid" id="grpTiming"></div>
+
+    <div class="metric-section-label">MVRV Filter Impact <span class="info-icon" title="Same EMA cross rules, same date range — this run's result vs. an EMA-only baseline with the MVRV filter switched off. Isolates what the filter alone contributed.">i</span></div>
+    <div class="metrics-grid" id="grpFilterImpact" style="grid-template-columns:repeat(4,1fr);"></div>
   </div>
 
   <!-- ============ ROLLING RETURN ============ -->
@@ -466,18 +526,20 @@ tr:hover td{background:var(--surface-2);}
   <div class="panel">
     <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--text-faint)"></span> METHODOLOGY</div></div>
     <div class="notes">
-      <b>Data</b> — daily BTC/USD closes, fetched live at page load from the linked dataset (updates daily; backtest re-runs automatically on new data).<br>
+      <b>Data</b> — daily BTC/USD closes, fetched live at page load from the linked dataset (updates daily; backtest re-runs automatically on new data). MVRV is fetched once from the same dataset repo and forward-filled onto whatever price grid (1h/4h/1d) is active.<br>
       <b>Signal</b> — EMA(fast) crossing above EMA(slow) = buy signal ("golden cross"); crossing below = sell signal ("death cross"). EMAs are seeded with a simple moving average over the first N days, then computed recursively.<br>
-      <b>Execution</b> — trades fill at the closing price of the signal day (no next-bar delay, no slippage modeled beyond the fee input).<br>
-      <b>Sizing</b> — each entry commits Sizing% of equity at that moment; the remainder is held as uninvested cash earning 0%. Fees are charged on notional at both entry and exit.<br>
+      <b>MVRV filter</b> — an optional valuation-regime overlay on top of the EMA cross, orthogonal to the price-derived trend signal. <i>Gate</i> blocks new entries once MVRV passes the Reduce threshold and force-exits positions at the Exit threshold, checked every bar (not only on cross days), so it can act ahead of a lagging EMA cross. <i>Scale</i> replaces the hard gate with a linear size taper between Reduce and Exit. Default thresholds (Long Reduce 2.0 / Exit 3.0, Short Reduce 1.2 / Exit 0.7) are read off the four completed BTC cycles in the linked MVRV summary — with only four cycles of history, treat these as a risk overlay to test out-of-sample, not an optimized parameter.<br>
+      <b>Execution</b> — trades fill at the closing price of the signal (or force-exit) bar — no next-bar delay, no slippage modeled beyond the fee input.<br>
+      <b>Sizing</b> — each entry commits Sizing% of equity at that moment, scaled further by the MVRV size multiplier when Scale mode is active; the remainder is held as uninvested cash earning 0%. Fees are charged on notional at both entry and exit.<br>
       <b>Shorts</b> — modeled with linear (non-levered) payoff: position value moves inversely to price return. This is a simplification of real margin/funding mechanics.<br>
       <b>Drawdown</b> — computed on the daily mark-to-market equity curve vs. its running all-time high. "True Drawdown" is the current distance from all-time high as of the last available day (0% if presently at a new high).<br>
+      <b>Filter Impact</b> — every recompute also runs an identical EMA-only backtest with the MVRV filter forced off, over the same date range, purely as a comparison baseline. It does not affect the trade log, chart, or headline metrics above it — those always reflect your current filter setting.<br>
       <b>Disclaimer</b> — historical backtest performance is not indicative of future results. This tool is for research and education only and is not investment advice.
     </div>
   </div>
 
   <div class="footer">
-    BTC EMA CROSS BACKTEST TERMINAL &nbsp;·&nbsp; data: 0xtrvkc/dynamic-btc-analytics-dashboard &nbsp;·&nbsp; client-side computation, nothing leaves your browser
+    BTC EMA CROSS + MVRV REGIME FILTER · BACKTEST TERMINAL &nbsp;·&nbsp; data: 0xtrvkc/dynamic-btc-analytics-dashboard &nbsp;·&nbsp; client-side computation, nothing leaves your browser
   </div>
 
 </div>
@@ -496,6 +558,7 @@ const TF_URLS = {
   '1d': BASE_URL + 'btc_daily_price.json'
 };
 const TF_LABELS = { '1h':'HOURLY', '4h':'4-HOUR', '1d':'DAILY' };
+const MVRV_URL = BASE_URL + 'mvrv.json';
 const HALVING_DATES = [
   { date:'2012-11-28', label:'1st Halving' },
   { date:'2016-07-09', label:'2nd Halving' },
@@ -504,14 +567,16 @@ const HALVING_DATES = [
   { date:'2028-03-26', label:'5th (Est.)' }
 ];
 let DATA_URL = TF_URLS['4h'];
-let RAW = { dates: [], prices: [] };  // full parsed series, ascending by date
-let charts = { price:null, equity:null, rolling:null };
+let RAW = { dates: [], prices: [], mvrv: [] };  // full parsed series, ascending by date
+let MVRV_BY_DATE = null; // Map<'YYYY-MM-DD', number> — fetched once, reused across timeframe switches
+let charts = { price:null, equity:null, rolling:null, mvrv:null };
 let state = {
   mode: 'buyonly',
   timeframe: '4h',
   priceRange: 'all',
   priceScale: 'linear',
-  eqScale: 'logarithmic'
+  eqScale: 'logarithmic',
+  mvrvMode: 'off'
 };
 
 /* ======================================================================
@@ -544,6 +609,15 @@ const fmtDate = (d) => {
 const daysBetween = (a,b) => Math.round((parseTs(b) - parseTs(a))/86400000);
 
 function themeVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+
+function mvrvZone(v){
+  if (v == null || !isFinite(v)) return { label:'—', color:'var(--text-faint)' };
+  if (v < 1.0)  return { label:'CAPITULATION', color:'var(--green)' };
+  if (v < 1.5)  return { label:'ACCUMULATE',   color:'var(--green)' };
+  if (v < 2.0)  return { label:'FAIR VALUE',   color:'var(--cyan)' };
+  if (v < 3.0)  return { label:'ELEVATED',     color:'var(--amber)' };
+  return             { label:'EUPHORIA',       color:'var(--red)' };
+}
 
 /* ======================================================================
    CORE MATH
@@ -587,12 +661,36 @@ function buildTrade(entry, exit, exitAmt){
   };
 }
 
-function runBacktest(dates, prices, signals, cfg, startIndex){
+function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
   const n = dates.length;
   const equity = new Array(n).fill(null);
   const sigMap = new Map(signals.map(s=>[s.index, s.type]));
+  const mcfg = cfg.mvrv || { mode:'off' };
   let cash = cfg.initialCapital, invested = 0, position = null, entry = null;
   const trades = [], markers = [];
+
+  function closePosition(i, reason){
+    const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
+    cash += exitAmt;
+    const t = buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt);
+    t.exitReason = reason;
+    trades.push(t);
+    markers.push({index:i, action: position==='long' ? 'sell' : 'buy', reason});
+    invested = 0; position = null; entry = null;
+  }
+
+  function tryOpen(i, side){
+    const mv = mvrv[i];
+    if (mvrvBlocksEntry(side, mv, mcfg)) return false; // gate mode / scale-taper-at-zero blocks a fresh entry
+    const mult = mvrvSizeMultiplier(side, mv, mcfg);
+    if (mult <= 0) return false;
+    const base = cash+invested;
+    const amt = base*cfg.sizingPct*mult; const fee = amt*cfg.feePct;
+    invested = amt-fee; cash = base-amt; position = side;
+    entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side};
+    markers.push({index:i, action: side==='long' ? 'buy' : 'sell'});
+    return true;
+  }
 
   for (let i=startIndex; i<n; i++){
     if (i === startIndex){
@@ -602,57 +700,28 @@ function runBacktest(dates, prices, signals, cfg, startIndex){
       else if (position === 'short') invested = Math.max(0, invested * (2 - prices[i]/prices[i-1]));
     }
 
+    // MVRV force-exit runs every bar and takes priority over the lagging EMA
+    // signal — this is what lets the filter sell/cover ahead of a death/golden
+    // cross when valuation is already in a historical blow-off or capitulation zone.
+    if (position && mvrvForcesExit(position, mvrv[i], mcfg)){
+      closePosition(i, 'mvrv');
+    }
+
     const sig = sigMap.get(i);
     if (sig){
       if (cfg.mode === 'buyonly'){
-        if (sig === 'buy' && position === null){
-          const base = cash+invested; const amt = base*cfg.sizingPct; const fee = amt*cfg.feePct;
-          invested = amt-fee; cash = base-amt; position='long';
-          entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side:'long'};
-          markers.push({index:i, action:'buy'});
-        } else if (sig === 'sell' && position === 'long'){
-          const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
-          cash += exitAmt; trades.push(buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt));
-          invested = 0; position = null; entry = null;
-          markers.push({index:i, action:'sell'});
-        }
+        if (sig === 'buy' && position === null) tryOpen(i, 'long');
+        else if (sig === 'sell' && position === 'long') closePosition(i, 'signal');
       } else if (cfg.mode === 'shortonly'){
-        if (sig === 'sell' && position === null){
-          const base = cash+invested; const amt = base*cfg.sizingPct; const fee = amt*cfg.feePct;
-          invested = amt-fee; cash = base-amt; position='short';
-          entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side:'short'};
-          markers.push({index:i, action:'sell'});
-        } else if (sig === 'buy' && position === 'short'){
-          const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
-          cash += exitAmt; trades.push(buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt));
-          invested = 0; position = null; entry = null;
-          markers.push({index:i, action:'buy'});
-        }
+        if (sig === 'sell' && position === null) tryOpen(i, 'short');
+        else if (sig === 'buy' && position === 'short') closePosition(i, 'signal');
       } else { // both
         if (sig === 'buy'){
-          if (position === 'short'){
-            const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
-            cash += exitAmt; trades.push(buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt));
-            invested = 0; position = null; entry = null;
-          }
-          if (position === null){
-            const base = cash+invested; const amt = base*cfg.sizingPct; const fee = amt*cfg.feePct;
-            invested = amt-fee; cash = base-amt; position='long';
-            entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side:'long'};
-          }
-          markers.push({index:i, action:'buy'});
+          if (position === 'short') closePosition(i, 'signal');
+          if (position === null) tryOpen(i, 'long');
         } else if (sig === 'sell'){
-          if (position === 'long'){
-            const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
-            cash += exitAmt; trades.push(buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt));
-            invested = 0; position = null; entry = null;
-          }
-          if (position === null){
-            const base = cash+invested; const amt = base*cfg.sizingPct; const fee = amt*cfg.feePct;
-            invested = amt-fee; cash = base-amt; position='short';
-            entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side:'short'};
-          }
-          markers.push({index:i, action:'sell'});
+          if (position === 'long') closePosition(i, 'signal');
+          if (position === null) tryOpen(i, 'short');
         }
       }
     }
@@ -778,13 +847,48 @@ function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosi
 /* ======================================================================
    FETCH + INIT
 ====================================================================== */
+async function loadMvrvOnce(){
+  if (MVRV_BY_DATE) return MVRV_BY_DATE;
+  MVRV_BY_DATE = new Map();
+  try{
+    const res = await fetch(MVRV_URL, {cache:'no-store'});
+    if (!res.ok) throw new Error('mvrv fetch failed: '+res.status);
+    const json = await res.json();
+    const arr = json.mvrv || [];
+    // Series is ~daily but timestamped with jitter; keyed by UTC calendar date,
+    // last value wins if a date somehow appears twice.
+    arr.forEach(pt=>{
+      const d = new Date(pt.x).toISOString().slice(0,10);
+      MVRV_BY_DATE.set(d, pt.y);
+    });
+  }catch(e){
+    console.error('MVRV load failed, filter will be a no-op:', e);
+  }
+  return MVRV_BY_DATE;
+}
+
+function alignMvrv(dates, byDate){
+  // Forward-filled lookup onto the price series' date grid (handles 1h/4h bars
+  // sharing a calendar date, and weekends/gaps in the MVRV source).
+  const out = new Array(dates.length).fill(null);
+  let last = null;
+  for (let i=0;i<dates.length;i++){
+    const key = dates[i].slice(0,10);
+    if (byDate.has(key)) last = byDate.get(key);
+    out[i] = last;
+  }
+  return out;
+}
+
 async function loadData(){
   const res = await fetch(DATA_URL, {cache:'no-store'});
   if (!res.ok) throw new Error('fetch failed: '+res.status);
   const json = await res.json();
   const dates = Object.keys(json).sort();
   const prices = dates.map(d=>Number(json[d]));
-  RAW = { dates, prices };
+  const byDate = await loadMvrvOnce();
+  const mvrv = alignMvrv(dates, byDate);
+  RAW = { dates, prices, mvrv };
 }
 
 function readConfig(){
@@ -795,8 +899,47 @@ function readConfig(){
     sizingPct: Math.min(1, Math.max(0.01, Number($('inSizing').value)||100)/100),
     emaFast: Math.max(2, Math.round(Number($('inEmaFast').value)||50)),
     emaSlow: Math.max(3, Math.round(Number($('inEmaSlow').value)||200)),
-    startDate: $('inStartDate').value || RAW.dates[0]
+    startDate: $('inStartDate').value || RAW.dates[0],
+    mvrv: {
+      mode: state.mvrvMode, // 'off' | 'gate' | 'scale'
+      longReduce: Math.max(0, Number($('inMvrvLongReduce').value)||2.0),
+      longExit: Math.max(0, Number($('inMvrvLongExit').value)||3.0),
+      shortReduce: Math.max(0, Number($('inMvrvShortReduce').value)||1.2),
+      shortExit: Math.max(0, Number($('inMvrvShortExit').value)||0.7)
+    }
   };
+}
+
+// Returns a 0..1 size multiplier for opening/holding a position at the given
+// MVRV reading. 'gate' is binary (1 or 0, i.e. blocked/force-exited elsewhere);
+// 'scale' linearly tapers between the reduce and exit thresholds.
+function mvrvSizeMultiplier(side, mvrvVal, mcfg){
+  if (mcfg.mode === 'off' || mvrvVal == null) return 1;
+  if (side === 'long'){
+    if (mvrvVal >= mcfg.longExit) return 0;
+    if (mvrvVal <= mcfg.longReduce) return 1;
+    if (mcfg.mode === 'gate') return 1; // gate only blocks brand-new entries, see runBacktest
+    const span = mcfg.longExit - mcfg.longReduce;
+    return span>0 ? 1 - (mvrvVal-mcfg.longReduce)/span : 1;
+  } else { // short
+    if (mvrvVal <= mcfg.shortExit) return 0;
+    if (mvrvVal >= mcfg.shortReduce) return 1;
+    if (mcfg.mode === 'gate') return 1;
+    const span = mcfg.shortReduce - mcfg.shortExit;
+    return span>0 ? 1 - (mcfg.shortReduce-mvrvVal)/span : 1;
+  }
+}
+
+function mvrvBlocksEntry(side, mvrvVal, mcfg){
+  if (mcfg.mode === 'off' || mvrvVal == null) return false;
+  if (side === 'long')  return mvrvVal >= (mcfg.mode==='gate' ? mcfg.longReduce : mcfg.longExit);
+  return mvrvVal <= (mcfg.mode==='gate' ? mcfg.shortReduce : mcfg.shortExit);
+}
+
+function mvrvForcesExit(side, mvrvVal, mcfg){
+  if (mcfg.mode === 'off' || mvrvVal == null) return false;
+  if (side === 'long')  return mvrvVal >= mcfg.longExit;
+  return mvrvVal <= mcfg.shortExit;
 }
 
 function renderCycleDividers(){
@@ -893,20 +1036,28 @@ function recompute(){
   if (userStartIdx > startIndex) startIndex = userStartIdx;
   if (startIndex >= RAW.dates.length-2) startIndex = Math.max(0, RAW.dates.length-3);
 
-  const bt = runBacktest(RAW.dates, RAW.prices, signals, cfg, startIndex);
+  const bt = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, cfg, startIndex);
   const bh = buyAndHoldEquity(RAW.dates, RAW.prices, cfg, startIndex);
   const metrics = computeMetrics(RAW.dates, RAW.prices, startIndex, bt.equity, bt.trades, cfg, bt.openPosition);
+
+  // Baseline for the "MVRV Filter Impact" comparison: identical EMA rules,
+  // identical date range, filter switched off. Isolates what the filter alone changed.
+  const baseCfg = { ...cfg, mvrv: { ...cfg.mvrv, mode:'off' } };
+  const btBase = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, baseCfg, startIndex);
+  const metricsBase = computeMetrics(RAW.dates, RAW.prices, startIndex, btBase.equity, btBase.trades, baseCfg, btBase.openPosition);
 
   const rollStrat = rollingReturn(bt.equity, startIndex, 365);
   const rollHold = rollingReturn(bh.eq, startIndex, 365);
 
-  lastResult = { cfg, emaFast, emaSlow, signals, startIndex, bt, bh, metrics, rollStrat, rollHold };
+  lastResult = { cfg, emaFast, emaSlow, signals, startIndex, bt, bh, metrics, rollStrat, rollHold, btBase, metricsBase };
 
   renderTicker();
   renderPriceChart();
   renderEquityChart();
   renderRollingChart();
+  renderMvrvChart();
   renderMetrics();
+  renderFilterImpact();
   renderHoldVsTrade();
   if (!sliderDragging) renderTradeLog();
   updateEntryReadout();
@@ -933,6 +1084,14 @@ function renderTicker(){
   } else {
     sigEl.innerHTML = '<span class="blink flat" id="tkBlink"></span>WARMING UP'; sigEl.style.color='var(--text-faint)';
   }
+
+  const mv = RAW.mvrv[n];
+  const zone = mvrvZone(mv);
+  const mvEl = $('tkMvrv');
+  mvEl.textContent = (mv!=null ? mv.toFixed(3) : '—') + '  ·  ' + zone.label;
+  mvEl.style.color = zone.color;
+  const nowLbl = $('mvrvNowLabel');
+  if (nowLbl) nowLbl.textContent = mv!=null ? ('MVRV '+mv.toFixed(3)+' — '+zone.label) : '—';
 }
 
 /* ======================================================================
@@ -1124,6 +1283,61 @@ function renderRollingChart(){
   }
 }
 
+function renderMvrvChart(){
+  const ctx = $('mvrvChart').getContext('2d');
+  const { startIndex, cfg } = lastResult;
+  const labels = RAW.dates.slice(startIndex);
+  const mvrvData = RAW.mvrv.slice(startIndex);
+  const gc = gridColor();
+  const mc = cfg.mvrv;
+
+  const longExitLine = mvrvData.map(()=>mc.longExit);
+  const longReduceLine = mvrvData.map(()=>mc.longReduce);
+  const shortReduceLine = mvrvData.map(()=>mc.shortReduce);
+  const shortExitLine = mvrvData.map(()=>mc.shortExit);
+
+  const cfgChart = {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        { label:'MVRV', data:mvrvData, borderColor:themeVar('--violet'), backgroundColor:hexAlpha(themeVar('--violet'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true },
+        { label:'Long Exit', data:longExitLine, borderColor:themeVar('--red'), borderWidth:1, borderDash:[4,3], pointRadius:0, tension:0 },
+        { label:'Long Reduce', data:longReduceLine, borderColor:themeVar('--amber'), borderWidth:1, borderDash:[2,3], pointRadius:0, tension:0 },
+        { label:'Short Reduce', data:shortReduceLine, borderColor:themeVar('--amber'), borderWidth:1, borderDash:[2,3], pointRadius:0, tension:0 },
+        { label:'Short Exit', data:shortExitLine, borderColor:themeVar('--red'), borderWidth:1, borderDash:[4,3], pointRadius:0, tension:0 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          filter:(item)=> item.datasetIndex===0,
+          callbacks:{ label: (item)=> 'MVRV: '+item.parsed.y.toFixed(3)+' ('+mvrvZone(item.parsed.y).label+')' }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:8, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}, callback:(v)=>v.toFixed(1)}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.mvrv){
+    const c = charts.mvrv;
+    c.data = cfgChart.data;
+    c.options = cfgChart.options;
+    c.update('none');
+  } else {
+    charts.mvrv = new Chart(ctx, cfgChart);
+  }
+}
+
 function hexAlpha(hex, alpha){
   hex = hex.trim();
   if (hex[0] !== '#') return hex;
@@ -1179,6 +1393,26 @@ function renderMetrics(){
     metricCard('Profit Hold Time', m.profitHold!=null?m.profitHold.toFixed(1)+' d':'—', 'avg. winning trade', null, 'Average number of days a winning trade was held from entry to exit.'),
     metricCard('Drawdown Hold Time', m.lossHold!=null?m.lossHold.toFixed(1)+' d':'—', 'avg. losing trade', null, 'Average number of days a losing trade was held from entry to exit.'),
     metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', 'min – max across all trades')
+  ].join('');
+}
+
+function deltaCls(withVal, baseVal, higherIsBetter){
+  if (withVal==null || baseVal==null) return null;
+  const better = higherIsBetter ? withVal>baseVal : withVal<baseVal;
+  const equal = Math.abs(withVal-baseVal) < 1e-9;
+  return equal ? null : (better ? 'pos' : 'neg');
+}
+
+function renderFilterImpact(){
+  const m = lastResult.metrics, b = lastResult.metricsBase;
+  const filterOn = lastResult.cfg.mvrv.mode !== 'off';
+  const sub = (withV, baseV, fmt) => filterOn ? ('baseline: '+fmt(baseV)) : 'filter is off — identical to baseline';
+
+  $('grpFilterImpact').innerHTML = [
+    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true)),
+    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true)),
+    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false)),
+    metricCard('Total Trades (Filtered)', m.totalTrades, sub(m.totalTrades,b.totalTrades,(v)=>String(v)), null, 'Trade count often drops under the filter — that\'s the gate/force-exit doing its job, not a bug.')
   ].join('');
 }
 
@@ -1243,16 +1477,25 @@ function renderTradeLog(){
    EVENTS
 ====================================================================== */
 function wireEvents(){
-  document.querySelectorAll('.tab-btn').forEach(btn=>{
+  document.querySelectorAll('.tab-btn[data-mode]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-btn[data-mode]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.mode = btn.dataset.mode;
       recompute();
     });
   });
 
-  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow'].forEach(id=>{
+  document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.mvrvMode = btn.dataset.mvrvmode;
+      recompute();
+    });
+  });
+
+  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit'].forEach(id=>{
     let t;
     $(id).addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(recompute, 260); });
   });
@@ -1353,7 +1596,7 @@ function wireEvents(){
     const cur = document.body.getAttribute('data-theme');
     const next = cur === 'dark' ? 'light' : 'dark';
     document.body.setAttribute('data-theme', next);
-    if (lastResult){ renderPriceChart(); renderEquityChart(); renderRollingChart(); }
+    if (lastResult){ renderPriceChart(); renderEquityChart(); renderRollingChart(); renderMvrvChart(); }
   });
 
   window.addEventListener('resize', ()=>{
