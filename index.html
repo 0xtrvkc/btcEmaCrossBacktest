@@ -139,18 +139,34 @@ a{color:var(--cyan);}
 .legend-dot{width:8px;height:8px;border-radius:50%;}
 
 /* ============================= METRIC GRID ============================= */
-.metric-section-label{font-size:11px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--text-faint); margin:18px 0 10px; display:flex; align-items:center; gap:8px;}
-.metric-section-label::after{content:''; flex:1; height:1px; background:var(--border);}
-.metrics-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:10px;}
-.metric-card{
-  background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:12px 13px;
-  display:flex; flex-direction:column; gap:5px; min-width:0;
+
+
+.metrics-table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:9px;}
+.metrics-table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px;}
+.metrics-table thead th{
+  text-align:left; padding:9px 14px; background:var(--surface-2); color:var(--text-faint);
+  font-size:10px; text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border);
+  font-family:var(--mono); position:sticky; top:0;
 }
-.metric-card .mc-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); font-weight:700; display:flex; align-items:center; gap:5px;}
-.metric-card .mc-val{font-family:var(--mono); font-size:18px; font-weight:700; letter-spacing:.2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.metric-card .mc-sub{font-size:10.5px; color:var(--text-faint); font-family:var(--mono);}
-.mc-val.pos{color:var(--green);}
-.mc-val.neg{color:var(--red);}
+.metrics-table thead th.mt-val-h{text-align:right;}
+.metrics-table td{padding:9px 14px; border-bottom:1px solid var(--border); color:var(--text-dim); vertical-align:middle;}
+.metrics-table tbody:last-child tr:last-child td{border-bottom:none;}
+.metrics-table tbody tr:hover td{background:var(--surface-2);}
+.metrics-table tr.mt-section td{
+  background:var(--bg-elevated); color:var(--text-faint); font-size:10.5px; font-weight:700;
+  letter-spacing:.6px; text-transform:uppercase; padding:8px 14px; border-bottom:1px solid var(--border-strong);
+  display:flex; align-items:center; gap:8px;
+}
+.metrics-table .mt-label{color:var(--text); font-weight:600; white-space:nowrap;}
+.metrics-table .mt-label .info-icon{margin-left:4px;}
+.metrics-table .mt-val{font-weight:700; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; width:1%;}
+.metrics-table .mt-val.pos{color:var(--green);}
+.metrics-table .mt-val.neg{color:var(--red);}
+.metrics-table .mt-hold{font-weight:600; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; width:1%; color:var(--text-dim);}
+.metrics-table .mt-sub{color:var(--text-faint); font-size:11.5px;}
+@media(max-width:640px){
+  .metrics-table .mt-sub{display:none;}
+}
 
 /* ============================= HOLD VS TRADE ============================= */
 .hvt-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
@@ -192,7 +208,6 @@ tr:hover td{background:var(--surface-2);}
 /* ============================= RESPONSIVE ============================= */
 @media(max-width:980px){
   .controls-grid{grid-template-columns:repeat(3,1fr);}
-  .metrics-grid{grid-template-columns:repeat(3,1fr);}
   .hvt-grid{grid-template-columns:repeat(2,1fr);}
   .ticker{flex-wrap:wrap;}
   .ticker-cell{min-width:33%; border-bottom:1px solid var(--border);}
@@ -200,7 +215,6 @@ tr:hover td{background:var(--surface-2);}
 @media(max-width:640px){
   .wrap{padding:10px 12px 40px;}
   .controls-grid{grid-template-columns:repeat(2,1fr);}
-  .metrics-grid{grid-template-columns:repeat(2,1fr);}
   .hvt-grid{grid-template-columns:repeat(2,1fr);}
   .ticker-cell{min-width:50%;}
   .chart-box{height:280px;}
@@ -446,31 +460,45 @@ tr:hover td{background:var(--surface-2);}
       <div class="panel-title"><span class="dot" style="background:var(--cyan)"></span> PERFORMANCE METRICS</div>
     </div>
 
-    <div class="metric-section-label">Return Profile</div>
-    <div class="metrics-grid" id="grpReturn"></div>
+    <div class="metrics-table-wrap">
+      <table class="metrics-table">
+        <thead>
+          <tr><th>Metric</th><th class="mt-val-h">Strategy</th><th class="mt-val-h">Buy &amp; Hold</th><th>Detail</th></tr>
+        </thead>
+        <tbody><tr class="mt-section"><td colspan="4">Return Profile</td></tr></tbody>
+        <tbody id="grpReturn"></tbody>
 
-    <div class="metric-section-label">Trade Statistics</div>
-    <div class="metrics-grid" id="grpTrades"></div>
+        <tbody><tr class="mt-section"><td colspan="4">Trade Statistics</td></tr></tbody>
+        <tbody id="grpTrades"></tbody>
 
-    <div class="metric-section-label">Drawdown Analysis</div>
-    <div class="metrics-grid" id="grpDrawdown"></div>
+        <tbody><tr class="mt-section"><td colspan="4">Drawdown Analysis</td></tr></tbody>
+        <tbody id="grpDrawdown"></tbody>
 
-    <div class="metric-section-label">Timing &amp; Streaks</div>
-    <div class="metrics-grid" id="grpTiming"></div>
+        <tbody><tr class="mt-section"><td colspan="4">Timing &amp; Streaks</td></tr></tbody>
+        <tbody id="grpTiming"></tbody>
 
-    <div class="metric-section-label">MVRV Filter Impact <span class="info-icon" title="Same EMA cross rules, same date range — this run's result vs. an EMA-only baseline with the MVRV filter switched off. Isolates what the filter alone contributed.">i</span></div>
-    <div class="metrics-grid" id="grpFilterImpact" style="grid-template-columns:repeat(4,1fr);"></div>
+        <tbody><tr class="mt-section"><td colspan="4">MVRV Filter Impact <span class="info-icon" title="Same EMA cross rules, same date range — this run's result vs. an EMA-only baseline with the MVRV filter switched off. Isolates what the filter alone contributed.">i</span></td></tr></tbody>
+        <tbody id="grpFilterImpact"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- ============ ROLLING RETURN ============ -->
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><span class="dot" style="background:var(--violet)"></span> ROLLING 1Y RETURN</div>
+      <div class="panel-title"><span class="dot" style="background:var(--violet)"></span> <span id="rollingTitle">ROLLING 1Y RETURN</span></div>
+      <div class="chart-tools">
+        <div class="field" style="gap:4px;">
+          <label style="margin:0;">Window <span class="info-icon" title="Length of the trailing return window used for the rolling return chart and metric card below. E.g. 1 = trailing 365 days, 0.5 = trailing ~6 months.">i</span></label>
+          <div class="suffix-wrap"><span>yr</span><input type="number" id="inRollWindow" value="1" min="0.1" max="10" step="0.1" style="width:88px; padding-right:26px;"></div>
+        </div>
+      </div>
     </div>
     <div class="chart-box short"><canvas id="rollingChart"></canvas></div>
+    <div id="rollingEmptyNote" style="display:none; text-align:center; padding:14px; color:var(--text-faint); font-family:var(--mono); font-size:12px;">Not enough history for a <span id="rollingEmptyWinLabel"></span> window yet — try a shorter one.</div>
     <div class="legend-row">
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span> Strategy — trailing 365d return</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint); opacity:.8"></span> Buy &amp; Hold — trailing 365d return</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span> <span id="rollingLegendStrat">Strategy — trailing 365d return</span></div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint); opacity:.8"></span> <span id="rollingLegendHold">Buy &amp; Hold — trailing 365d return</span></div>
       <div class="legend-item" style="color:var(--text-faint)">Y-axis clipped to the 1st–99th percentile range for readability</div>
     </div>
   </div>
@@ -576,7 +604,8 @@ let state = {
   priceRange: 'all',
   priceScale: 'linear',
   eqScale: 'logarithmic',
-  mvrvMode: 'off'
+  mvrvMode: 'off',
+  rollWindowYears: 1
 };
 
 /* ======================================================================
@@ -765,14 +794,58 @@ function drawdownEpisodes(dd, startIndex){
   return eps;
 }
 
-function rollingReturn(equity, startIndex, window){
+// Rolling return computed against a real calendar-time window (not a fixed bar count),
+// since bars can be 1h/4h/1d depending on the selected timeframe — a fixed index offset
+// of N would mean N hours, N*4 hours, or N days, which silently breaks at anything but
+// the daily timeframe. Two-pointer works because both the lookback target and the
+// candidate index only move forward as i increases.
+function rollingReturn(dates, equity, startIndex, windowDays){
   const out = new Array(equity.length).fill(null);
-  for (let i=startIndex+window;i<equity.length;i++){
-    if (equity[i]!=null && equity[i-window]!=null && equity[i-window] > 0){
-      out[i] = equity[i]/equity[i-window] - 1;
+  const windowMs = windowDays*86400000;
+  let j = startIndex;
+  for (let i=startIndex;i<equity.length;i++){
+    const targetTs = parseTs(dates[i]).getTime() - windowMs;
+    while (j+1<i && parseTs(dates[j+1]).getTime() <= targetTs) j++;
+    if (parseTs(dates[j]).getTime() <= targetTs && equity[i]!=null && equity[j]!=null && equity[j] > 0){
+      out[i] = equity[i]/equity[j] - 1;
     }
   }
   return out;
+}
+
+// Human label for a rolling window given in years, e.g. 1 -> "1Y", 0.5 -> "6M", 2.5 -> "2.5Y"
+function rollWindowLabel(years){
+  if (years < 1 - 1e-9){
+    const months = Math.round(years*12);
+    return months + 'M';
+  }
+  const rounded = Math.round(years*100)/100;
+  return (Number.isInteger(rounded) ? rounded : rounded.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')) + 'Y';
+}
+
+// Recompute just the rolling-return series off the existing backtest/hold equity curves
+// (no need to re-run the full backtest when only the rolling window changes) and refresh
+// the chart + dependent metric card.
+function updateRollingWindow(){
+  if (!lastResult) return;
+  const { bt, bh, startIndex } = lastResult;
+  const days = state.rollWindowYears*365.25;
+  lastResult.rollStrat = rollingReturn(RAW.dates, bt.equity, startIndex, days);
+  lastResult.rollHold = rollingReturn(RAW.dates, bh.eq, startIndex, days);
+  updateRollingLabels();
+  renderRollingChart();
+  renderMetrics();
+}
+
+function updateRollingLabels(){
+  const label = rollWindowLabel(state.rollWindowYears);
+  const days = Math.max(1, Math.round(state.rollWindowYears*365.25));
+  const titleEl = $('rollingTitle');
+  if (titleEl) titleEl.textContent = 'ROLLING ' + label + ' RETURN';
+  const stratEl = $('rollingLegendStrat');
+  if (stratEl) stratEl.textContent = 'Strategy — trailing ' + days + 'd return';
+  const holdEl = $('rollingLegendHold');
+  if (holdEl) holdEl.textContent = 'Buy & Hold — trailing ' + days + 'd return';
 }
 
 /* ======================================================================
@@ -1039,6 +1112,7 @@ function recompute(){
   const bt = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, cfg, startIndex);
   const bh = buyAndHoldEquity(RAW.dates, RAW.prices, cfg, startIndex);
   const metrics = computeMetrics(RAW.dates, RAW.prices, startIndex, bt.equity, bt.trades, cfg, bt.openPosition);
+  const metricsHold = computeMetrics(RAW.dates, RAW.prices, startIndex, bh.eq, [], cfg, null);
 
   // Baseline for the "MVRV Filter Impact" comparison: identical EMA rules,
   // identical date range, filter switched off. Isolates what the filter alone changed.
@@ -1046,10 +1120,11 @@ function recompute(){
   const btBase = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, baseCfg, startIndex);
   const metricsBase = computeMetrics(RAW.dates, RAW.prices, startIndex, btBase.equity, btBase.trades, baseCfg, btBase.openPosition);
 
-  const rollStrat = rollingReturn(bt.equity, startIndex, 365);
-  const rollHold = rollingReturn(bh.eq, startIndex, 365);
+  const rollWindowDays = state.rollWindowYears*365.25;
+  const rollStrat = rollingReturn(RAW.dates, bt.equity, startIndex, rollWindowDays);
+  const rollHold = rollingReturn(RAW.dates, bh.eq, startIndex, rollWindowDays);
 
-  lastResult = { cfg, emaFast, emaSlow, signals, startIndex, bt, bh, metrics, rollStrat, rollHold, btBase, metricsBase };
+  lastResult = { cfg, emaFast, emaSlow, signals, startIndex, bt, bh, metrics, metricsHold, rollStrat, rollHold, btBase, metricsBase };
 
   renderTicker();
   renderPriceChart();
@@ -1232,12 +1307,36 @@ function percentileBounds(arr, lo, hi){
 function renderRollingChart(){
   const ctx = $('rollingChart').getContext('2d');
   const { rollStrat, rollHold, startIndex } = lastResult;
-  const labels = RAW.dates.slice(startIndex);
   const gc = gridColor();
+  const winLabel = rollWindowLabel(state.rollWindowYears);
+
+  // A window of N years mathematically can't produce a value until N years of
+  // history have passed, so trim the chart to start where data actually begins
+  // instead of stretching the x-axis back to the full backtest start date and
+  // leaving a long empty gap.
+  let firstValid = -1;
+  for (let i=startIndex;i<RAW.dates.length;i++){
+    if (rollStrat[i]!=null || rollHold[i]!=null){ firstValid = i; break; }
+  }
+
+  const emptyNote = $('rollingEmptyNote');
+  if (firstValid < 0){
+    $('rollingEmptyWinLabel').textContent = winLabel;
+    emptyNote.style.display = 'block';
+    ctx.canvas.style.display = 'none';
+    if (charts.rolling){ charts.rolling.destroy(); charts.rolling = null; }
+    return;
+  }
+  emptyNote.style.display = 'none';
+  ctx.canvas.style.display = 'block';
+
+  const labels = RAW.dates.slice(firstValid);
+  const stratData = rollStrat.slice(firstValid);
+  const holdData = rollHold.slice(firstValid);
 
   // Clip the visible y-range to the 1st-99th percentile across both series so a rare
   // parabolic outlier (e.g. BTC's 2013 rally) doesn't compress the rest of the chart.
-  const combined = rollStrat.slice(startIndex).concat(rollHold.slice(startIndex));
+  const combined = stratData.concat(holdData);
   let [pLo, pHi] = percentileBounds(combined, 0.01, 0.99);
   let yMin, yMax;
   if (pLo != null){
@@ -1250,8 +1349,8 @@ function renderRollingChart(){
     data:{
       labels,
       datasets:[
-        { label:'Strategy 1Y Roll', data:rollStrat.slice(startIndex), borderColor:themeVar('--violet'), borderWidth:1.5, pointRadius:0, tension:0, spanGaps:false },
-        { label:'Hold 1Y Roll', data:rollHold.slice(startIndex), borderColor:themeVar('--text-faint'), borderWidth:1.1, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:false }
+        { label:'Strategy '+winLabel+' Roll', data:stratData, borderColor:themeVar('--violet'), borderWidth:1.5, pointRadius:0, tension:0, spanGaps:false },
+        { label:'Hold '+winLabel+' Roll', data:holdData, borderColor:themeVar('--text-faint'), borderWidth:1.1, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:false }
       ]
     },
     options:{
@@ -1350,49 +1449,54 @@ function hexAlpha(hex, alpha){
 /* ======================================================================
    RENDER: METRICS
 ====================================================================== */
-function metricCard(label, val, sub, cls, tip){
-  const tipHtml = tip ? `<span class="info-icon" title="${tip}">i</span>` : '';
-  return `<div class="metric-card">
-    <div class="mc-label">${label} ${tipHtml}</div>
-    <div class="mc-val ${cls||''}">${val}</div>
-    ${sub?`<div class="mc-sub">${sub}</div>`:''}
-  </div>`;
+function metricCard(label, val, holdVal, sub, cls, tip){
+  const tipHtml = tip ? ` <span class="info-icon" title="${tip}">i</span>` : '';
+  return `<tr>
+    <td class="mt-label">${label}${tipHtml}</td>
+    <td class="mt-val ${cls||''}">${val}</td>
+    <td class="mt-hold">${holdVal==null?'—':holdVal}</td>
+    <td class="mt-sub">${sub||''}</td>
+  </tr>`;
 }
 
 function renderMetrics(){
   const m = lastResult.metrics;
+  const h = lastResult.metricsHold;
   const cfg = lastResult.cfg;
+  const rollLabel = rollWindowLabel(state.rollWindowYears);
+  const rollDays = Math.max(1, Math.round(state.rollWindowYears*365.25));
+  const holdRoll = lastValid(lastResult.rollHold);
 
   $('grpReturn').innerHTML = [
-    metricCard('Final Equity', fmtUSDFull(m.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg'),
-    metricCard('CAGR', fmtSignedPct(m.cagr), 'compound annual growth rate', m.cagr>=0?'pos':'neg', 'Geometric compound annual growth rate over the full backtest period: (Final/Initial)^(1/years) − 1.'),
-    metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year return — distinct from CAGR, which compounds geometrically.'),
-    metricCard('Years of Investment', m.years.toFixed(2)+' yrs'),
-    metricCard('Rolling 1Y Return', fmtSignedPct(lastValid(lastResult.rollStrat)), 'trailing 365d, latest', lastValid(lastResult.rollStrat)>=0?'pos':'neg', 'Strategy return over the most recent 365-day trailing window.')
+    metricCard('Final Equity', fmtUSDFull(m.finalEquity), fmtUSDFull(h.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg'),
+    metricCard('CAGR', fmtSignedPct(m.cagr), fmtSignedPct(h.cagr), 'compound annual growth rate', m.cagr>=0?'pos':'neg', 'Geometric compound annual growth rate over the full backtest period: (Final/Initial)^(1/years) − 1.'),
+    metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), fmtSignedPct(h.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year return — distinct from CAGR, which compounds geometrically.'),
+    metricCard('Years of Investment', m.years.toFixed(2)+' yrs', h.years.toFixed(2)+' yrs'),
+    metricCard('Rolling '+rollLabel+' Return', fmtSignedPct(lastValid(lastResult.rollStrat)), fmtSignedPct(holdRoll), 'trailing '+rollDays+'d, latest', lastValid(lastResult.rollStrat)>=0?'pos':'neg', 'Return over the most recent '+rollDays+'-day trailing window.')
   ].join('');
 
   $('grpTrades').innerHTML = [
-    metricCard('Total Trades', m.totalTrades, m.tradesPerYear.toFixed(1)+' / yr'),
-    metricCard('Win Rate', fmtPct(m.winRate), m.totalTrades+' closed trades', m.winRate>=0.5?'pos':'neg'),
-    metricCard('Profit Factor', m.profitFactor==Infinity?'∞':(m.profitFactor!=null?m.profitFactor.toFixed(2):'—'), 'gross profit / gross loss', (m.profitFactor==null?'':(m.profitFactor>=1?'pos':'neg')), 'Sum of dollar gains on winning trades divided by the absolute sum of dollar losses on losing trades.'),
-    metricCard('Max Profit', fmtSignedPct(m.maxProfit), 'best single trade', 'pos'),
-    metricCard('Min Profit (Positive)', fmtSignedPct(m.minProfitPositive), 'smallest winning trade', 'pos', 'The smallest return among trades that were still profitable — the "weakest win."'),
-    metricCard('Average Profit', fmtSignedPct(m.avgProfit), 'mean return, all trades', m.avgProfit>=0?'pos':'neg')
+    metricCard('Total Trades', m.totalTrades, '0', m.tradesPerYear.toFixed(1)+' / yr', null, null),
+    metricCard('Win Rate', fmtPct(m.winRate), null, m.totalTrades+' closed trades', m.winRate>=0.5?'pos':'neg'),
+    metricCard('Profit Factor', m.profitFactor==Infinity?'∞':(m.profitFactor!=null?m.profitFactor.toFixed(2):'—'), null, 'gross profit / gross loss', (m.profitFactor==null?'':(m.profitFactor>=1?'pos':'neg')), 'Sum of dollar gains on winning trades divided by the absolute sum of dollar losses on losing trades.'),
+    metricCard('Max Profit', fmtSignedPct(m.maxProfit), null, 'best single trade', 'pos'),
+    metricCard('Min Profit (Positive)', fmtSignedPct(m.minProfitPositive), null, 'smallest winning trade', 'pos', 'The smallest return among trades that were still profitable — the "weakest win."'),
+    metricCard('Average Profit', fmtSignedPct(m.avgProfit), null, 'mean return, all trades', m.avgProfit>=0?'pos':'neg')
   ].join('');
 
   $('grpDrawdown').innerHTML = [
-    metricCard('Max Drawdown', fmtPct(m.maxDrawdown), 'deepest peak-to-trough', 'neg'),
-    metricCard('Min Drawdown', fmtPct(m.minDrawdown), 'shallowest episode', 'neg', 'The smallest-magnitude decline among completed drawdown episodes.'),
-    metricCard('Average Drawdown', fmtPct(m.avgDrawdown), m.eps.length+' episodes', 'neg'),
-    metricCard('True Drawdown', fmtPct(m.trueDrawdown), 'live, from all-time high', m.trueDrawdown>=-0.0001?'pos':'neg', 'Current distance below the strategy all-time equity high, as of the most recent bar. 0% means the strategy is presently at a new high.')
+    metricCard('Max Drawdown', fmtPct(m.maxDrawdown), fmtPct(h.maxDrawdown), 'deepest peak-to-trough', 'neg'),
+    metricCard('Min Drawdown', fmtPct(m.minDrawdown), fmtPct(h.minDrawdown), 'shallowest episode', 'neg', 'The smallest-magnitude decline among completed drawdown episodes.'),
+    metricCard('Average Drawdown', fmtPct(m.avgDrawdown), fmtPct(h.avgDrawdown), m.eps.length+' episodes', 'neg'),
+    metricCard('True Drawdown', fmtPct(m.trueDrawdown), fmtPct(h.trueDrawdown), 'live, from all-time high', m.trueDrawdown>=-0.0001?'pos':'neg', 'Current distance below the all-time equity high, as of the most recent bar. 0% means presently at a new high.')
   ].join('');
 
   $('grpTiming').innerHTML = [
-    metricCard('Max Consecutive Wins', m.maxWinStreak, null, 'pos'),
-    metricCard('Max Consecutive Losses', m.maxLossStreak, null, 'neg'),
-    metricCard('Profit Hold Time', m.profitHold!=null?m.profitHold.toFixed(1)+' d':'—', 'avg. winning trade', null, 'Average number of days a winning trade was held from entry to exit.'),
-    metricCard('Drawdown Hold Time', m.lossHold!=null?m.lossHold.toFixed(1)+' d':'—', 'avg. losing trade', null, 'Average number of days a losing trade was held from entry to exit.'),
-    metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', 'min – max across all trades')
+    metricCard('Max Consecutive Wins', m.maxWinStreak, null, null, 'pos'),
+    metricCard('Max Consecutive Losses', m.maxLossStreak, null, null, 'neg'),
+    metricCard('Profit Hold Time', m.profitHold!=null?m.profitHold.toFixed(1)+' d':'—', null, 'avg. winning trade', null, 'Average number of days a winning trade was held from entry to exit.'),
+    metricCard('Drawdown Hold Time', m.lossHold!=null?m.lossHold.toFixed(1)+' d':'—', null, 'avg. losing trade', null, 'Average number of days a losing trade was held from entry to exit.'),
+    metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', null, 'min – max across all trades')
   ].join('');
 }
 
@@ -1409,10 +1513,10 @@ function renderFilterImpact(){
   const sub = (withV, baseV, fmt) => filterOn ? ('baseline: '+fmt(baseV)) : 'filter is off — identical to baseline';
 
   $('grpFilterImpact').innerHTML = [
-    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true)),
-    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true)),
-    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false)),
-    metricCard('Total Trades (Filtered)', m.totalTrades, sub(m.totalTrades,b.totalTrades,(v)=>String(v)), null, 'Trade count often drops under the filter — that\'s the gate/force-exit doing its job, not a bug.')
+    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), null, sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true)),
+    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), null, sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true)),
+    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), null, sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false)),
+    metricCard('Total Trades (Filtered)', m.totalTrades, null, sub(m.totalTrades,b.totalTrades,(v)=>String(v)), null, 'Trade count often drops under the filter — that\'s the gate/force-exit doing its job, not a bug.')
   ].join('');
 }
 
@@ -1499,6 +1603,20 @@ function wireEvents(){
     let t;
     $(id).addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(recompute, 260); });
   });
+
+  // Rolling return window: doesn't touch the backtest itself, so just recompute
+  // the rolling series off the already-computed equity curves and redraw the chart.
+  (function(){
+    let t;
+    $('inRollWindow').addEventListener('input', ()=>{
+      clearTimeout(t);
+      t = setTimeout(()=>{
+        const v = Math.min(10, Math.max(0.1, Number($('inRollWindow').value)||1));
+        state.rollWindowYears = v;
+        updateRollingWindow();
+      }, 180);
+    });
+  })();
 
   // Backtest-start date field: keep the entry slider in sync
   (function(){
