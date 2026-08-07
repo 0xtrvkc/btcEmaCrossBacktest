@@ -1,4 +1,3 @@
- https://0xtrvkc.github.io/btcEmaCrossBacktest/
 # BTC EMA Cross · Backtest Terminal
 
 A single-page, client-side backtesting terminal for a Bitcoin EMA(50/200) moving-average-cross strategy, with an optional MVRV valuation-regime filter layered on top.
