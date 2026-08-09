@@ -93,6 +93,24 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
   .btn-export{width:34px; padding:0; justify-content:center;}
 }
 
+/* ============================= PAGE TABS ============================= */
+.page-tabs{display:flex; gap:8px; margin:14px 0 16px;}
+.page-tab-btn{
+  display:flex; align-items:center; gap:8px; padding:10px 16px; border-radius:9px;
+  border:1px solid var(--border); background:var(--surface); color:var(--text-dim);
+  font-family:var(--sans); font-size:13px; font-weight:700; cursor:pointer; transition:.15s;
+}
+.page-tab-btn:hover{color:var(--text); border-color:var(--border-strong);}
+.page-tab-btn.active{color:var(--text); border-color:var(--cyan); background:color-mix(in srgb, var(--cyan) 10%, var(--surface));}
+.page-tab-badge{
+  font-family:var(--mono); font-size:10px; font-weight:800; background:var(--cyan); color:#031b28;
+  border-radius:20px; padding:1px 6px; line-height:1.4;
+}
+@media(max-width:640px){
+  .page-tabs{gap:6px;}
+  .page-tab-btn{padding:9px 12px; font-size:12px; flex:1; justify-content:center;}
+}
+
 /* ============================= TICKER STRIP ============================= */
 .ticker{
   display:flex; align-items:stretch; gap:0; background:var(--bg-elevated);
@@ -371,6 +389,20 @@ tr:hover td{background:var(--surface-2);}
     </div>
   </div>
 
+  <!-- ============ PAGE TABS ============ -->
+  <div class="page-tabs" role="tablist">
+    <button class="page-tab-btn active" id="pageTabBacktestBtn" role="tab" aria-selected="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-4-4L3 15.5"/></svg>
+      Backtest
+    </button>
+    <button class="page-tab-btn" id="pageTabAnalysisBtn" role="tab" aria-selected="false">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-6 3 3 4-8"/><circle cx="7" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="13" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="17" cy="4" r="1.4" fill="currentColor" stroke="none"/></svg>
+      Analysis
+      <span class="page-tab-badge">4</span>
+    </button>
+  </div>
+
+  <div id="tabBacktest">
   <!-- ============ CONTROLS ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -588,6 +620,9 @@ tr:hover td{background:var(--surface-2);}
         <tbody><tr class="mt-section"><td colspan="4">Drawdown Analysis</td></tr></tbody>
         <tbody id="grpDrawdown"></tbody>
 
+        <tbody><tr class="mt-section"><td colspan="4">Risk-Adjusted Return</td></tr></tbody>
+        <tbody id="grpRisk"></tbody>
+
         <tbody><tr class="mt-section"><td colspan="4">Timing &amp; Streaks</td></tr></tbody>
         <tbody id="grpTiming"></tbody>
 
@@ -714,6 +749,89 @@ tr:hover td{background:var(--surface-2);}
       <b>Disclaimer</b> — historical backtest performance is not indicative of future results. This tool is for research and education only and is not investment advice.
     </div>
   </div>
+  </div> <!-- /tabBacktest -->
+
+  <!-- ============ ANALYSIS TAB ============ -->
+  <div id="tabAnalysis" style="display:none;">
+
+    <div class="panel" style="background:transparent; border-style:dashed; box-shadow:none;">
+      <div class="panel-head" style="margin-bottom:8px;">
+        <div style="font-size:11.5px; color:var(--text-faint); line-height:1.6; max-width:640px;">
+          Computed directly from the raw price series — independent of your backtest settings on the other tab, so these always reflect the full loaded history.
+        </div>
+        <div class="pillgroup" id="analysisRangeGroup">
+          <button class="pill" data-range="180">6M</button>
+          <button class="pill active" data-range="365">1Y</button>
+          <button class="pill" data-range="1095">3Y</button>
+          <button class="pill" data-range="1825">5Y</button>
+          <button class="pill" data-range="all">ALL</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- RSI ---- -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--cyan)"></span> RSI (14)</div>
+        <div class="chart-tools"><div class="legend-item" style="color:var(--text-faint); font-size:11px;">Momentum · overbought / oversold</div></div>
+      </div>
+      <div class="chart-box short"><canvas id="rsiChart"></canvas></div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span> RSI(14)</div>
+        <div class="legend-item" style="color:var(--text-faint)">Dashed lines at 70 (overbought) and 30 (oversold)</div>
+      </div>
+    </div>
+
+    <!-- ---- MACD ---- -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--cyan)"></span> MACD (12, 26, 9)</div>
+        <div class="chart-tools"><div class="legend-item" style="color:var(--text-faint); font-size:11px;">Trend momentum, confirms/leads the EMA cross</div></div>
+      </div>
+      <div class="chart-box short"><canvas id="macdChart"></canvas></div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span> MACD line</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span> Signal line</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint)"></span> Histogram</div>
+      </div>
+    </div>
+
+    <!-- ---- TREND EFFICIENCY (ADX-style) ---- -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span> TREND EFFICIENCY <span style="color:var(--text-faint); font-weight:600;">(ADX-style)</span></div>
+        <div class="chart-tools"><div class="legend-item" style="color:var(--text-faint); font-size:11px;">High = trending, low = choppy/ranging</div></div>
+      </div>
+      <div class="chart-box short"><canvas id="trendEffChart"></canvas></div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span> Trend Efficiency (0–100)</div>
+        <div class="legend-item" style="color:var(--text-faint)">Dashed line at 25 — the usual "trending" threshold</div>
+        <div class="legend-item" style="color:var(--text-faint); margin-left:auto;">Note: uses Kaufman's Efficiency Ratio, not textbook ADX — see note above</div>
+      </div>
+    </div>
+
+    <!-- ---- VOLATILITY & BANDS ---- -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--red)"></span> VOLATILITY &amp; BANDS</div>
+      </div>
+      <div class="trade-analytics-grid">
+        <div>
+          <div class="sub-chart-label">Close-based ATR (14)</div>
+          <div class="chart-box short"><canvas id="atrChart"></canvas></div>
+        </div>
+        <div>
+          <div class="sub-chart-label">Bollinger Bands (20, 2σ)</div>
+          <div class="chart-box short"><canvas id="bbChart"></canvas></div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--red)"></span> ATR — avg. |close-to-close| move, not true range (no high/low in feed)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint)"></span> Bollinger Bands — exact, close-price based</div>
+      </div>
+    </div>
+
+  </div> <!-- /tabAnalysis -->
 
   <div class="footer">
     BTC EMA CROSS + MVRV REGIME FILTER · BACKTEST TERMINAL &nbsp;·&nbsp; data: 0xtrvkc/dynamic-btc-analytics-dashboard &nbsp;·&nbsp; client-side computation, nothing leaves your browser
@@ -780,7 +898,8 @@ const HALVING_DATES = [
 let DATA_URL = TF_URLS['4h'];
 let RAW = { dates: [], prices: [], mvrv: [] };  // full parsed series, ascending by date
 let MVRV_BY_DATE = null; // Map<'YYYY-MM-DD', number> — fetched once, reused across timeframe switches
-let charts = { price:null, equity:null, rolling:null, mvrv:null, drawdown:null, pnlHist:null, durationScatter:null };
+let charts = { price:null, equity:null, rolling:null, mvrv:null, drawdown:null, pnlHist:null, durationScatter:null, rsi:null, macd:null, trendEff:null, atr:null, bb:null };
+let ANALYSIS = null; // { rsi, macd:{macdLine,signalLine,hist}, trendEff, atr, bb:{mid,upper,lower} } — computed once per data load
 let lastEntrySpanDays = 0; // days between current Entry Date and the last available bar — used by updateRollWindowCap
 let state = {
   mode: 'buyonly',
@@ -790,7 +909,9 @@ let state = {
   eqScale: 'logarithmic',
   mvrvMode: 'off',
   rollWindowYears: 1,
-  regimeShade: true
+  regimeShade: true,
+  analysisRange: '365',
+  activeTab: 'backtest'
 };
 
 /* ======================================================================
@@ -849,6 +970,119 @@ function computeEMA(values, period){
     }
   }
   return out;
+}
+
+// EMA starting from an arbitrary index rather than 0 — used for MACD's signal
+// line, which needs to skip the leading nulls in the MACD line itself.
+function computeEMAFrom(values, period, fromIdx){
+  const out = new Array(values.length).fill(null);
+  const k = 2/(period+1);
+  let sum = 0;
+  for (let i=fromIdx;i<values.length;i++){
+    const w = i - fromIdx;
+    if (w < period){
+      sum += values[i];
+      if (w === period-1) out[i] = sum/period;
+    } else {
+      out[i] = values[i]*k + out[i-1]*(1-k);
+    }
+  }
+  return out;
+}
+
+/* ======================================================================
+   ANALYSIS-TAB INDICATORS
+   All computed purely from RAW.prices/RAW.dates — independent of any
+   backtest config, so they reflect the full loaded history regardless of
+   Entry Date, mode, or MVRV filter settings on the Backtest tab.
+
+   Data caveat: the price feed is CLOSE-ONLY (no open/high/low), so two of
+   these are close-based substitutes rather than textbook indicators:
+     - "ATR" here is a close-to-close average absolute move (Wilder-smoothed),
+       not true ATR, which needs the high-low range.
+     - "Trend Efficiency" is Kaufman's Efficiency Ratio (net move ÷ total
+       path length, 0–100), used as an ADX-style trend-strength stand-in —
+       true ADX also needs high/low for its directional-movement calc.
+   RSI, MACD, and Bollinger Bands are all exact — they only ever need close.
+====================================================================== */
+
+// Wilder's RSI.
+function computeRSI(prices, period=14){
+  const rsi = new Array(prices.length).fill(null);
+  if (prices.length <= period) return rsi;
+  let gainSum=0, lossSum=0;
+  for (let i=1;i<=period;i++){
+    const diff = prices[i]-prices[i-1];
+    if (diff>=0) gainSum+=diff; else lossSum-=diff;
+  }
+  let avgGain = gainSum/period, avgLoss = lossSum/period;
+  rsi[period] = avgLoss===0 ? 100 : 100 - 100/(1+avgGain/avgLoss);
+  for (let i=period+1;i<prices.length;i++){
+    const diff = prices[i]-prices[i-1];
+    const gain = diff>0 ? diff : 0;
+    const loss = diff<0 ? -diff : 0;
+    avgGain = (avgGain*(period-1)+gain)/period;
+    avgLoss = (avgLoss*(period-1)+loss)/period;
+    rsi[i] = avgLoss===0 ? 100 : 100 - 100/(1+avgGain/avgLoss);
+  }
+  return rsi;
+}
+
+// Standard MACD, built on the existing EMA helpers.
+function computeMACD(prices, fastP=12, slowP=26, signalP=9){
+  const fastEMA = computeEMA(prices, fastP);
+  const slowEMA = computeEMA(prices, slowP);
+  const macdLine = prices.map((_,i)=> (fastEMA[i]!=null && slowEMA[i]!=null) ? fastEMA[i]-slowEMA[i] : null);
+  const firstValid = macdLine.findIndex(v=>v!=null);
+  const signalLine = firstValid>=0 ? computeEMAFrom(macdLine, signalP, firstValid) : new Array(prices.length).fill(null);
+  const hist = macdLine.map((v,i)=> (v!=null && signalLine[i]!=null) ? v-signalLine[i] : null);
+  return { macdLine, signalLine, hist };
+}
+
+// Kaufman's Efficiency Ratio, scaled 0–100 to read like ADX (>25 = trending).
+// ER = net price change over the window ÷ sum of absolute bar-to-bar moves.
+function computeTrendEfficiency(prices, period=14){
+  const out = new Array(prices.length).fill(null);
+  for (let i=period;i<prices.length;i++){
+    const netChange = Math.abs(prices[i]-prices[i-period]);
+    let pathLength = 0;
+    for (let j=i-period+1;j<=i;j++) pathLength += Math.abs(prices[j]-prices[j-1]);
+    out[i] = pathLength>0 ? (netChange/pathLength)*100 : 0;
+  }
+  return out;
+}
+
+// Close-to-close "ATR" (Wilder-smoothed average absolute move). Approximates
+// true ATR reasonably well in trend/level but will read lower than real ATR
+// since it can't see intrabar wicks.
+function computeCloseATR(prices, period=14){
+  const out = new Array(prices.length).fill(null);
+  const tr = prices.map((p,i)=> i===0 ? null : Math.abs(p-prices[i-1]));
+  if (prices.length <= period) return out;
+  let sum = 0;
+  for (let i=1;i<=period;i++) sum += tr[i];
+  out[period] = sum/period;
+  for (let i=period+1;i<prices.length;i++){
+    out[i] = (out[i-1]*(period-1) + tr[i]) / period;
+  }
+  return out;
+}
+
+// Bollinger Bands — exact, needs close price only.
+function computeBollinger(prices, period=20, mult=2){
+  const mid = new Array(prices.length).fill(null);
+  const upper = new Array(prices.length).fill(null);
+  const lower = new Array(prices.length).fill(null);
+  for (let i=period-1;i<prices.length;i++){
+    let sum=0;
+    for (let j=i-period+1;j<=i;j++) sum += prices[j];
+    const mean = sum/period;
+    let variance=0;
+    for (let j=i-period+1;j<=i;j++) variance += (prices[j]-mean)**2;
+    const sd = Math.sqrt(variance/period);
+    mid[i]=mean; upper[i]=mean+mult*sd; lower[i]=mean-mult*sd;
+  }
+  return { mid, upper, lower };
 }
 
 function generateSignals(emaFast, emaSlow){
@@ -1056,6 +1290,55 @@ function updateRollWindowCap(spanDays){
 /* ======================================================================
    METRICS
 ====================================================================== */
+// Sharpe, Sortino, Calmar, and Ulcer Index — resampled to one value per
+// calendar day first (last bar of each day) so annualization stays correct
+// regardless of whether the backtest is running on 1h/4h/1d bars. Crypto
+// trades 365 days/year (not 252 like traditional markets), and risk-free
+// rate is treated as 0, the common simplification for crypto strategies.
+function computeRiskAdjustedMetrics(dates, equity, startIndex, cagr, maxDrawdown){
+  const empty = { sharpe:null, sortino:null, calmar:null, ulcerIndex:null };
+  const dayMap = new Map();
+  for (let i=startIndex;i<dates.length;i++){
+    if (equity[i]==null) continue;
+    dayMap.set(dates[i].slice(0,10), equity[i]);
+  }
+  const dayKeys = Array.from(dayMap.keys()).sort();
+  const dayVals = dayKeys.map(k=>dayMap.get(k));
+  if (dayVals.length < 11) return empty;
+
+  const rets = [];
+  for (let i=1;i<dayVals.length;i++){
+    if (dayVals[i-1]>0) rets.push(dayVals[i]/dayVals[i-1] - 1);
+  }
+  if (rets.length < 10) return empty;
+
+  const mean = rets.reduce((a,b)=>a+b,0)/rets.length;
+  const variance = rets.reduce((a,r)=>a+(r-mean)**2,0)/rets.length;
+  const std = Math.sqrt(variance);
+  const annReturn = mean*365.25;
+  const annVol = std*Math.sqrt(365.25);
+  const sharpe = annVol>0 ? annReturn/annVol : null;
+
+  // Downside deviation uses the full sample size N in the denominator (the
+  // standard semi-deviation convention), not just the count of losing days.
+  const downsideSqSum = rets.reduce((a,r)=> a + (r<0 ? r*r : 0), 0);
+  const downsideDev = Math.sqrt(downsideSqSum/rets.length);
+  const annDownsideVol = downsideDev*Math.sqrt(365.25);
+  const sortino = annDownsideVol>0 ? annReturn/annDownsideVol : (annReturn>0 ? Infinity : null);
+
+  const calmar = (cagr!=null && maxDrawdown<0) ? cagr/Math.abs(maxDrawdown) : null;
+
+  let peak = dayVals[0], sqSum = 0;
+  for (let i=0;i<dayVals.length;i++){
+    peak = Math.max(peak, dayVals[i]);
+    const ddPct = peak>0 ? ((dayVals[i]-peak)/peak)*100 : 0;
+    sqSum += ddPct*ddPct;
+  }
+  const ulcerIndex = Math.sqrt(sqSum/dayVals.length);
+
+  return { sharpe, sortino, calmar, ulcerIndex };
+}
+
 function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosition){
   const n = dates.length;
   const lastIdx = n-1;
@@ -1112,13 +1395,16 @@ function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosi
   const holdDaysArr = closed.map(t=>t.holdDays);
   const holdRange = holdDaysArr.length ? [Math.min(...holdDaysArr), Math.max(...holdDaysArr)] : null;
 
+  const risk = computeRiskAdjustedMetrics(dates, equity, startIndex, cagr, maxDrawdown);
+
   return {
     years, cagr, annualizedReturn, finalEquity,
     profitFactor, winRate, tradesPerYear, totalTrades: closed.length,
     maxProfit, minProfitPositive, avgProfit,
     maxDrawdown, avgDrawdown, minDrawdown, trueDrawdown,
     maxWinStreak, maxLossStreak, profitHold, lossHold, holdRange,
-    dd, eps, grossProfit, grossLoss
+    dd, eps, grossProfit, grossLoss,
+    sharpe: risk.sharpe, sortino: risk.sortino, calmar: risk.calmar, ulcerIndex: risk.ulcerIndex
   };
 }
 
@@ -1167,6 +1453,7 @@ async function loadData(){
   const byDate = await loadMvrvOnce();
   const mvrv = alignMvrv(dates, byDate);
   RAW = { dates, prices, mvrv };
+  computeAnalysisIndicators();
 }
 
 function readConfig(){
@@ -1391,17 +1678,46 @@ function baseScales(xColor, yColor, scaleType){
   };
 }
 
+// Bars per calendar day for the current timeframe — the range-pill values
+// (180/365/1095/1825) are meant as calendar days, but the underlying array
+// index is in BARS, so this converts between them. Without it, "1Y" on the
+// default 4h timeframe would only pull ~61 days of bars (365 bars ÷ 6/day),
+// and just ~15 days on 1h — silently wrong regardless of the button's label.
+function barsPerDay(){
+  return state.timeframe === '1h' ? 24 : state.timeframe === '4h' ? 6 : 1;
+}
+
 function sliceRange(){
   const n = RAW.dates.length;
   if (state.priceRange === 'all') return { from: lastResult.startIndex, to: n-1 };
-  const days = Number(state.priceRange);
-  return { from: Math.max(lastResult.startIndex, n-days), to: n-1 };
+  const bars = Number(state.priceRange) * barsPerDay();
+  return { from: Math.max(lastResult.startIndex, n-bars), to: n-1 };
 }
 
-// Maps an MVRV reading to a shading color for the price-chart background,
-// reusing the same zone thresholds as mvrvZone()/the MVRV chart tooltip.
-// Fair-value readings are left unshaded so the band only highlights the
-// extremes (cheap/capitulation vs. euphoric/overheated).
+// Same idea as sliceRange(), but for the Analysis tab: independent of the
+// backtest's Entry Date entirely, since these indicators aren't tied to any
+// backtest run — just how far back the person wants to look at raw price.
+function sliceAnalysisRange(){
+  const n = RAW.dates.length;
+  if (state.analysisRange === 'all') return { from: 0, to: n-1 };
+  const bars = Number(state.analysisRange) * barsPerDay();
+  return { from: Math.max(0, n-bars), to: n-1 };
+}
+
+// Computes every Analysis-tab indicator once over the FULL price history
+// (so warm-up/smoothing periods are correct), independent of the currently
+// selected display range — sliceAnalysisRange() trims for display only.
+function computeAnalysisIndicators(){
+  const prices = RAW.prices;
+  ANALYSIS = {
+    rsi: computeRSI(prices, 14),
+    macd: computeMACD(prices, 12, 26, 9),
+    trendEff: computeTrendEfficiency(prices, 14),
+    atr: computeCloseATR(prices, 14),
+    bb: computeBollinger(prices, 20, 2)
+  };
+}
+
 // Maps an MVRV reading to a shading color for the price-chart background,
 // using the ACTUAL configured filter thresholds for the current backtest run
 // (cfg.mvrv.longReduce/longExit/shortReduce/shortExit — the same numbers the
@@ -2017,6 +2333,260 @@ function renderMonthlyHeatmap(){
 }
 
 /* ======================================================================
+   RENDER: ANALYSIS TAB (RSI, MACD, Trend Efficiency, Volatility & Bands)
+   All independent of the backtest — driven by ANALYSIS (computed once per
+   data load in computeAnalysisIndicators()) and sliceAnalysisRange() for
+   the currently selected display window.
+====================================================================== */
+function renderRSIChart(){
+  const el = $('rsiChart');
+  if (!el || !ANALYSIS) return;
+  const ctx = el.getContext('2d');
+  const { from, to } = sliceAnalysisRange();
+  const labels = RAW.dates.slice(from, to+1);
+  const data = ANALYSIS.rsi.slice(from, to+1);
+  const gc = gridColor();
+
+  const cfg = {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'RSI(14)', data, borderColor:themeVar('--violet'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.parsed.y==null ? 'RSI: —' : 'RSI: '+item.parsed.y.toFixed(1) }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:8, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ min:0, max:100, grid:{color:gc}, ticks:{color:textColor(), stepSize:25, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} }
+      }
+    },
+    plugins:[overboughtOversoldPlugin(70, 30)]
+  };
+  if (charts.rsi){
+    charts.rsi.data = cfg.data; charts.rsi.options = cfg.options; charts.rsi.update('none');
+  } else {
+    charts.rsi = new Chart(ctx, cfg);
+  }
+}
+
+// Reusable inline plugin: draws two horizontal dashed reference lines
+// (e.g. RSI 70/30 or Trend-Efficiency 25) using pure canvas draw calls, no
+// annotation plugin dependency.
+function overboughtOversoldPlugin(hi, lo){
+  return {
+    id: 'refLines'+hi+'_'+lo,
+    afterDraw(chart){
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea || !scales.y) return;
+      ctx.save();
+      ctx.setLineDash([4,4]);
+      ctx.strokeStyle = themeVar('--text-faint');
+      ctx.lineWidth = 1;
+      [hi, lo].forEach(v=>{
+        if (v==null) return;
+        const y = scales.y.getPixelForValue(v);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, y);
+        ctx.lineTo(chartArea.right, y);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+  };
+}
+
+function renderMACDChart(){
+  const el = $('macdChart');
+  if (!el || !ANALYSIS) return;
+  const ctx = el.getContext('2d');
+  const { from, to } = sliceAnalysisRange();
+  const labels = RAW.dates.slice(from, to+1);
+  const macdData = ANALYSIS.macd.macdLine.slice(from, to+1);
+  const sigData = ANALYSIS.macd.signalLine.slice(from, to+1);
+  const histData = ANALYSIS.macd.hist.slice(from, to+1);
+  const histColors = histData.map(v=> v==null ? 'transparent' : (v>=0 ? hexAlpha(themeVar('--green'),0.55) : hexAlpha(themeVar('--red'),0.55)));
+  const gc = gridColor();
+
+  const cfg = {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { type:'bar', label:'Histogram', data:histData, backgroundColor:histColors, borderWidth:0, order:2, categoryPercentage:1, barPercentage:1 },
+        { type:'line', label:'MACD', data:macdData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true, order:0 },
+        { type:'line', label:'Signal', data:sigData, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true, order:1 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.dataset.label+': '+(item.parsed.y==null?'—':item.parsed.y.toFixed(2)) }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:8, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.macd){
+    charts.macd.data = cfg.data; charts.macd.options = cfg.options; charts.macd.update('none');
+  } else {
+    charts.macd = new Chart(ctx, cfg);
+  }
+}
+
+function renderTrendEffChart(){
+  const el = $('trendEffChart');
+  if (!el || !ANALYSIS) return;
+  const ctx = el.getContext('2d');
+  const { from, to } = sliceAnalysisRange();
+  const labels = RAW.dates.slice(from, to+1);
+  const data = ANALYSIS.trendEff.slice(from, to+1);
+  const gc = gridColor();
+
+  const cfg = {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Trend Efficiency', data, borderColor:themeVar('--amber'), backgroundColor:hexAlpha(themeVar('--amber'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.parsed.y==null ? '—' : item.parsed.y.toFixed(1)+(item.parsed.y>=25?' (trending)':' (choppy)') }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:8, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ min:0, max:100, grid:{color:gc}, ticks:{color:textColor(), stepSize:25, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} }
+      }
+    },
+    plugins:[overboughtOversoldPlugin(25, null)]
+  };
+  if (charts.trendEff){
+    charts.trendEff.data = cfg.data; charts.trendEff.options = cfg.options; charts.trendEff.update('none');
+  } else {
+    charts.trendEff = new Chart(ctx, cfg);
+  }
+}
+
+function renderVolatilityCharts(){
+  if (!ANALYSIS) return;
+  const { from, to } = sliceAnalysisRange();
+  const labels = RAW.dates.slice(from, to+1);
+  const gc = gridColor();
+
+  // --- ATR ---
+  const atrEl = $('atrChart');
+  if (atrEl){
+    const atrData = ANALYSIS.atr.slice(from, to+1);
+    const cfg = {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:'Close-ATR(14)', data:atrData, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+            titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+            titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+            padding:10,
+            callbacks:{ label:(item)=> item.parsed.y==null?'—':'$'+fmtUSD(item.parsed.y) }
+          }
+        },
+        scales:{
+          x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{family:'JetBrains Mono', size:9.5}}, border:{color:gc} },
+          y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:9.5}, callback:(v)=>'$'+fmtUSD(v)}, border:{color:gc} }
+        }
+      }
+    };
+    if (charts.atr){
+      charts.atr.data = cfg.data; charts.atr.options = cfg.options; charts.atr.update('none');
+    } else {
+      charts.atr = new Chart(atrEl.getContext('2d'), cfg);
+    }
+  }
+
+  // --- Bollinger Bands (overlaid on close price) ---
+  const bbEl = $('bbChart');
+  if (bbEl){
+    const priceData = RAW.prices.slice(from, to+1);
+    const midData = ANALYSIS.bb.mid.slice(from, to+1);
+    const upperData = ANALYSIS.bb.upper.slice(from, to+1);
+    const lowerData = ANALYSIS.bb.lower.slice(from, to+1);
+    const cfg = {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:'Upper', data:upperData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:true, fill:'+1', backgroundColor:hexAlpha(themeVar('--cyan'),0.06) },
+        { label:'Lower', data:lowerData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:true },
+        { label:'SMA(20)', data:midData, borderColor:themeVar('--amber'), borderWidth:1.2, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:true },
+        { label:'Close', data:priceData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+            titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+            titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+            padding:10,
+            callbacks:{ label:(item)=> item.dataset.label+': $'+(item.parsed.y==null?'—':fmtUSD(item.parsed.y)) }
+          }
+        },
+        scales:{
+          x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{family:'JetBrains Mono', size:9.5}}, border:{color:gc} },
+          y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:9.5}, callback:(v)=>'$'+fmtUSD(v)}, border:{color:gc} }
+        }
+      }
+    };
+    if (charts.bb){
+      charts.bb.data = cfg.data; charts.bb.options = cfg.options; charts.bb.update('none');
+    } else {
+      charts.bb = new Chart(bbEl.getContext('2d'), cfg);
+    }
+  }
+}
+
+function renderAnalysisTab(){
+  if (!RAW || !RAW.dates || !RAW.dates.length) return;
+  if (!ANALYSIS) computeAnalysisIndicators();
+  renderRSIChart();
+  renderMACDChart();
+  renderTrendEffChart();
+  renderVolatilityCharts();
+}
+
+/* ======================================================================
    RENDER: METRICS
 ====================================================================== */
 function metricCard(label, val, holdVal, sub, cls, tip){
@@ -2059,6 +2629,14 @@ function renderMetrics(){
     metricCard('Min Drawdown', fmtPct(m.minDrawdown), fmtPct(h.minDrawdown), 'shallowest episode', 'neg', 'The smallest-magnitude decline among completed drawdown episodes.'),
     metricCard('Average Drawdown', fmtPct(m.avgDrawdown), fmtPct(h.avgDrawdown), m.eps.length+' episodes', 'neg'),
     metricCard('True Drawdown', fmtPct(m.trueDrawdown), fmtPct(h.trueDrawdown), 'live, from all-time high', m.trueDrawdown>=-0.0001?'pos':'neg', 'Current distance below the all-time equity high, as of the most recent bar. 0% means presently at a new high.')
+  ].join('');
+
+  const fmtRatio = (v)=> v==null ? '—' : (v===Infinity ? '∞' : v.toFixed(2));
+  $('grpRisk').innerHTML = [
+    metricCard('Sharpe Ratio', fmtRatio(m.sharpe), fmtRatio(h.sharpe), 'return ÷ volatility, ann.', m.sharpe==null?null:(m.sharpe>=1?'pos':(m.sharpe<0?'neg':null)), 'Annualized daily return divided by annualized daily volatility. Risk-free rate assumed 0. Above 1 is generally considered good; above 2, very good.'),
+    metricCard('Sortino Ratio', fmtRatio(m.sortino), fmtRatio(h.sortino), 'return ÷ downside vol., ann.', m.sortino==null?null:(m.sortino>=1?'pos':(m.sortino<0?'neg':null)), 'Like Sharpe, but only penalizes downside volatility (negative days) — upside swings do not count against it.'),
+    metricCard('Calmar Ratio', fmtRatio(m.calmar), fmtRatio(h.calmar), 'CAGR ÷ |max drawdown|', m.calmar==null?null:(m.calmar>=0.5?'pos':(m.calmar<0?'neg':null)), 'CAGR divided by the absolute value of max drawdown — how much annual growth you got per unit of worst-case pain.'),
+    metricCard('Ulcer Index', m.ulcerIndex!=null?m.ulcerIndex.toFixed(2):'—', h.ulcerIndex!=null?h.ulcerIndex.toFixed(2):'—', 'RMS depth × duration underwater', null, 'A "pain" score that accounts for both how deep and how long drawdowns were, not just the single worst one. Lower is better; 0 means never below a prior high.')
   ].join('');
 
   $('grpTiming').innerHTML = [
@@ -2247,6 +2825,7 @@ function wireEvents(){
         }
         initEntrySlider();
         recompute();
+        if (state.activeTab === 'analysis') renderAnalysisTab();
       }catch(err){
         $('statusLine').innerHTML = '<span style="color:var(--red)">●</span> failed to load '+TF_LABELS[tf].toLowerCase()+' dataset';
         $('dataRangeLabel').textContent = 'DATA FETCH ERROR — '+err.message;
@@ -2261,6 +2840,33 @@ function wireEvents(){
       btn.classList.add('active'); state.priceRange = btn.dataset.range; renderPriceChart();
     });
   });
+
+  document.querySelectorAll('#analysisRangeGroup .pill').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#analysisRangeGroup .pill').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active'); state.analysisRange = btn.dataset.range; renderAnalysisTab();
+    });
+  });
+
+  // Page-level tabs (Backtest / Analysis). Chart.js can't size a canvas
+  // inside a display:none container, so Analysis charts are (re)rendered
+  // every time the tab becomes visible rather than once at load — cheap
+  // once the charts exist (just a data/options update), and guarantees
+  // they're fresh if the timeframe or theme changed while on the other tab.
+  function setActiveTab(tab){
+    state.activeTab = tab;
+    const isBacktest = tab === 'backtest';
+    $('tabBacktest').style.display = isBacktest ? '' : 'none';
+    $('tabAnalysis').style.display = isBacktest ? 'none' : '';
+    $('pageTabBacktestBtn').classList.toggle('active', isBacktest);
+    $('pageTabAnalysisBtn').classList.toggle('active', !isBacktest);
+    $('pageTabBacktestBtn').setAttribute('aria-selected', isBacktest);
+    $('pageTabAnalysisBtn').setAttribute('aria-selected', !isBacktest);
+    if (!isBacktest) renderAnalysisTab();
+  }
+  $('pageTabBacktestBtn').addEventListener('click', ()=> setActiveTab('backtest'));
+  $('pageTabAnalysisBtn').addEventListener('click', ()=> setActiveTab('analysis'));
+
   document.querySelectorAll('#priceScaleGroup .pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('#priceScaleGroup .pill').forEach(b=>b.classList.remove('active'));
@@ -2298,6 +2904,7 @@ function wireEvents(){
       renderPriceChart(); renderEquityChart(); renderDrawdownChart(); renderRollingChart(); renderMvrvChart();
       renderMonthlyHeatmap(); renderPnlHistogram(); renderDurationScatter();
     }
+    if (state.activeTab === 'analysis') renderAnalysisTab();
   });
 
   window.addEventListener('resize', ()=>{
