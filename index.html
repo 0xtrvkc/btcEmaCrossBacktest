@@ -480,6 +480,42 @@ tr:hover td{background:var(--surface-2);}
     </div>
   </div>
 
+  <!-- ============ RISK MANAGEMENT ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--red)"></span> RISK MANAGEMENT</div>
+    </div>
+    <div class="controls-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="field">
+        <label>ATR Trailing Stop <span class="info-icon" title="When on, tracks the highest close since entry (long) or lowest close since entry (short) and exits the moment price gives back Multiplier × Close-ATR(14) from that extreme — independent of the EMA cross. Runs every bar, so it can cut a trade well before a lagging cross would.">i</span></label>
+        <div class="tabs" style="padding:3px;">
+          <button class="tab-btn active" data-atrmode="off" style="font-size:11.5px; padding:7px 8px;">Off</button>
+          <button class="tab-btn" data-atrmode="on" style="font-size:11.5px; padding:7px 8px;">On</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>ATR Stop Multiplier <span class="info-icon" title="How many Close-ATR(14) units of pullback from the post-entry extreme are allowed before the trailing stop fires. Lower = tighter stop, cuts drawdown more but risks whipsawing out of trades that later resume trend.">i</span></label>
+        <input type="number" id="inAtrMult" value="3.0" min="0.5" max="10" step="0.1">
+      </div>
+      <div class="field">
+        <label>Vol-Targeted Sizing <span class="info-icon" title="When on, position size is scaled by Target Volatility ÷ current Close-ATR(14)-as-%-of-price, clamped to 0.25×–1.75× the base Sizing/Trade. Shrinks size automatically when volatility is elevated (typically right before/during drawdown-prone periods) and lets it run closer to full size when volatility is calm.">i</span></label>
+        <div class="tabs" style="padding:3px;">
+          <button class="tab-btn active" data-volmode="off" style="font-size:11.5px; padding:7px 8px;">Off</button>
+          <button class="tab-btn" data-volmode="on" style="font-size:11.5px; padding:7px 8px;">On</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Target Volatility <span class="info-icon" title="Baseline daily ATR-as-%-of-price that sizing is normalized against. Below this, size scales up (capped at 1.75×); above this, size scales down (floored at 0.25×).">i</span></label>
+        <div class="suffix-wrap"><span>%</span><input type="number" id="inVolTarget" value="4.0" min="0.5" max="20" step="0.1"></div>
+      </div>
+    </div>
+    <div class="notes" style="margin-top:12px;">
+      <b>ATR Trailing Stop</b> — checked every bar, before the EMA signal is evaluated, so it can close a position ahead of a lagging cross. Recorded in the Trade Log with exit reason <span class="mono">ATR Stop</span>.<br>
+      <b>Vol-Targeted Sizing</b> — reduces new-entry size (and the size carried by that trade going forward) during high-volatility regimes, and modestly increases it during calm regimes, in an attempt to normalize risk per trade rather than risk per dollar.<br>
+      <b>Caution</b> — both are mechanical overlays on top of the same limited BTC history as the rest of this backtest; validate out-of-sample before relying on either.
+    </div>
+  </div>
+
   <!-- ============ ENTRY DATE SIMULATOR ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -726,7 +762,7 @@ tr:hover td{background:var(--surface-2);}
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Side</th><th>Entry Date</th><th>Entry Px</th><th>Exit Date</th><th>Exit Px</th><th>Hold (d)</th><th>Return</th><th>P&amp;L (USD)</th></tr>
+            <tr><th>#</th><th>Side</th><th>Entry Date</th><th>Entry Px</th><th>Exit Date</th><th>Exit Px</th><th>Exit Reason</th><th>Hold (d)</th><th>Return</th><th>P&amp;L (USD)</th></tr>
           </thead>
           <tbody id="tradeLogBody"></tbody>
         </table>
@@ -908,6 +944,8 @@ let state = {
   priceScale: 'linear',
   eqScale: 'logarithmic',
   mvrvMode: 'off',
+  atrStopMode: 'off',
+  volSizingMode: 'off',
   rollWindowYears: 1,
   regimeShade: true,
   analysisRange: '365',
@@ -1114,7 +1152,11 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
   const equity = new Array(n).fill(null);
   const sigMap = new Map(signals.map(s=>[s.index, s.type]));
   const mcfg = cfg.mvrv || { mode:'off' };
+  const acfg = cfg.atrStop || { enabled:false, mult:3 };
+  const vcfg = cfg.volSizing || { enabled:false, targetPct:0.04 };
+  const atr = (ANALYSIS && ANALYSIS.atr) || [];
   let cash = cfg.initialCapital, invested = 0, position = null, entry = null;
+  let trailExtreme = null; // best close since entry, for the ATR trailing stop
   const trades = [], markers = [];
 
   function closePosition(i, reason){
@@ -1124,25 +1166,45 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     t.exitReason = reason;
     trades.push(t);
     markers.push({index:i, action: position==='long' ? 'sell' : 'buy', reason});
-    invested = 0; position = null; entry = null;
+    invested = 0; position = null; entry = null; trailExtreme = null;
   }
 
   function tryOpen(i, side){
     const mv = mvrv[i];
     if (mvrvBlocksEntry(side, mv, mcfg)) return false; // gate mode / scale-taper-at-zero blocks a fresh entry
-    const mult = mvrvSizeMultiplier(side, mv, mcfg);
-    if (mult <= 0) return false;
+    const mvMult = mvrvSizeMultiplier(side, mv, mcfg);
+    if (mvMult <= 0) return false;
+    const vMult = volSizeMultiplier(prices[i], atr[i], vcfg);
     const base = cash+invested;
-    const amt = base*cfg.sizingPct*mult; const fee = amt*cfg.feePct;
+    const amt = base*cfg.sizingPct*mvMult*vMult; const fee = amt*cfg.feePct;
     invested = amt-fee; cash = base-amt; position = side;
     entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side};
+    trailExtreme = prices[i];
     markers.push({index:i, action: side==='long' ? 'buy' : 'sell'});
     return true;
   }
 
+  // ATR trailing stop: ratchets with the best close seen since entry rather than
+  // a fixed level off the entry price, so it tightens automatically as a trade
+  // works in your favor instead of only protecting the original risk. Checked
+  // every bar, ahead of the EMA signal, so it can act before a lagging cross would.
+  function checkAtrStop(i){
+    if (!acfg.enabled || !position || atr[i] == null) return false;
+    if (position === 'long'){
+      trailExtreme = Math.max(trailExtreme, prices[i]);
+      const stopPrice = trailExtreme - acfg.mult*atr[i];
+      if (prices[i] <= stopPrice) return true;
+    } else {
+      trailExtreme = Math.min(trailExtreme, prices[i]);
+      const stopPrice = trailExtreme + acfg.mult*atr[i];
+      if (prices[i] >= stopPrice) return true;
+    }
+    return false;
+  }
+
   for (let i=startIndex; i<n; i++){
     if (i === startIndex){
-      cash = cfg.initialCapital; invested = 0; position = null; entry = null;
+      cash = cfg.initialCapital; invested = 0; position = null; entry = null; trailExtreme = null;
     } else {
       if (position === 'long') invested = invested * (prices[i]/prices[i-1]);
       else if (position === 'short') invested = Math.max(0, invested * (2 - prices[i]/prices[i-1]));
@@ -1153,6 +1215,11 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     // cross when valuation is already in a historical blow-off or capitulation zone.
     if (position && mvrvForcesExit(position, mvrv[i], mcfg)){
       closePosition(i, 'mvrv');
+    }
+
+    // ATR trailing stop — same "acts ahead of the lagging cross" priority as MVRV above.
+    if (position && checkAtrStop(i)){
+      closePosition(i, 'atrStop');
     }
 
     const sig = sigMap.get(i);
@@ -1471,8 +1538,27 @@ function readConfig(){
       longExit: Math.max(0, Number($('inMvrvLongExit').value)||3.0),
       shortReduce: Math.max(0, Number($('inMvrvShortReduce').value)||1.2),
       shortExit: Math.max(0, Number($('inMvrvShortExit').value)||0.7)
+    },
+    atrStop: {
+      enabled: state.atrStopMode === 'on',
+      mult: Math.min(10, Math.max(0.5, Number($('inAtrMult').value)||3.0))
+    },
+    volSizing: {
+      enabled: state.volSizingMode === 'on',
+      targetPct: Math.min(20, Math.max(0.5, Number($('inVolTarget').value)||4.0))/100
     }
   };
+}
+
+// Vol-targeted size multiplier: Target Volatility ÷ current Close-ATR(14)-as-%-of-price,
+// clamped to 0.25x-1.75x so a near-zero ATR reading (illiquid stretch of history) can't
+// blow the multiplier up unboundedly, and a volatility spike can't zero the size out.
+function volSizeMultiplier(price, atrVal, vcfg){
+  if (!vcfg.enabled || atrVal == null || price <= 0) return 1;
+  const curPct = atrVal/price;
+  if (curPct <= 0) return 1;
+  const raw = vcfg.targetPct/curPct;
+  return Math.min(1.75, Math.max(0.25, raw));
 }
 
 // Returns a 0..1 size multiplier for opening/holding a position at the given
@@ -2706,10 +2792,14 @@ function renderHoldVsTrade(){
 /* ======================================================================
    RENDER: TRADE LOG
 ====================================================================== */
+const EXIT_REASON_LABEL = { signal:'EMA Cross', mvrv:'MVRV Filter', atrStop:'ATR Stop' };
+const EXIT_REASON_COLOR = { signal:'var(--text-dim)', mvrv:'var(--violet)', atrStop:'var(--amber)' };
 function renderTradeLog(){
   const { bt } = lastResult;
   const rows = bt.trades.map((t,i)=>{
     const posCls = t.pnlPct>=0 ? 'pos' : 'neg';
+    const reasonLabel = EXIT_REASON_LABEL[t.exitReason] || t.exitReason || '—';
+    const reasonColor = EXIT_REASON_COLOR[t.exitReason] || 'var(--text-dim)';
     return `<tr>
       <td>${i+1}</td>
       <td><span class="side-tag ${t.side}">${t.side.toUpperCase()}</span></td>
@@ -2717,12 +2807,13 @@ function renderTradeLog(){
       <td>$${fmtUSD(t.entryPrice)}</td>
       <td>${t.exitDate}</td>
       <td>$${fmtUSD(t.exitPrice)}</td>
+      <td style="color:${reasonColor}; font-size:11px;">${reasonLabel}</td>
       <td>${t.holdDays}</td>
       <td class="${posCls==='pos'?'':''}" style="color:${t.pnlPct>=0?'var(--green)':'var(--red)'}">${fmtSignedPct(t.pnlPct)}</td>
       <td style="color:${t.pnlDollar>=0?'var(--green)':'var(--red)'}">${t.pnlDollar>=0?'+':''}${fmtUSD(t.pnlDollar)}</td>
     </tr>`;
   }).reverse().join('');
-  $('tradeLogBody').innerHTML = rows || '<tr><td colspan="9" style="text-align:center; color:var(--text-faint); padding:20px;">No closed trades in this configuration yet.</td></tr>';
+  $('tradeLogBody').innerHTML = rows || '<tr><td colspan="10" style="text-align:center; color:var(--text-faint); padding:20px;">No closed trades in this configuration yet.</td></tr>';
 }
 
 /* ======================================================================
@@ -2747,7 +2838,25 @@ function wireEvents(){
     });
   });
 
-  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit'].forEach(id=>{
+  document.querySelectorAll('.tab-btn[data-atrmode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn[data-atrmode]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.atrStopMode = btn.dataset.atrmode;
+      recompute();
+    });
+  });
+
+  document.querySelectorAll('.tab-btn[data-volmode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn[data-volmode]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.volSizingMode = btn.dataset.volmode;
+      recompute();
+    });
+  });
+
+  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit','inAtrMult','inVolTarget'].forEach(id=>{
     let t;
     $(id).addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(recompute, 260); });
   });
