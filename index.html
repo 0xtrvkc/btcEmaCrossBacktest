@@ -2694,26 +2694,26 @@ function renderMetrics(){
   const holdRoll = lastValid(lastResult.rollHold);
 
   $('grpReturn').innerHTML = [
-    metricCard('Final Equity', fmtUSDFull(m.finalEquity), fmtUSDFull(h.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg'),
+    metricCard('Final Equity', fmtUSDFull(m.finalEquity), fmtUSDFull(h.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg', 'Portfolio value at the final bar of the backtest, including all realized and any open-position gains or losses.'),
     metricCard('CAGR', fmtSignedPct(m.cagr), fmtSignedPct(h.cagr), 'compound annual growth rate', m.cagr>=0?'pos':'neg', 'Geometric compound annual growth rate over the full backtest period: (Final/Initial)^(1/years) − 1.'),
     metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), fmtSignedPct(h.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year return — distinct from CAGR, which compounds geometrically.'),
-    metricCard('Years of Investment', m.years.toFixed(2)+' yrs', h.years.toFixed(2)+' yrs'),
+    metricCard('Years of Investment', m.years.toFixed(2)+' yrs', h.years.toFixed(2)+' yrs', null, null, 'Elapsed time from the actual backtest start date to the final bar, in years.'),
     metricCard('Rolling '+rollLabel+' Return', fmtSignedPct(lastValid(lastResult.rollStrat)), fmtSignedPct(holdRoll), 'trailing '+rollDays+'d, latest', lastValid(lastResult.rollStrat)>=0?'pos':'neg', 'Return over the most recent '+rollDays+'-day trailing window.')
   ].join('');
 
   $('grpTrades').innerHTML = [
-    metricCard('Total Trades', m.totalTrades, '0', m.tradesPerYear.toFixed(1)+' / yr', null, null),
-    metricCard('Win Rate', fmtPct(m.winRate), null, m.totalTrades+' closed trades', m.winRate>=0.5?'pos':'neg'),
+    metricCard('Total Trades', m.totalTrades, '0', m.tradesPerYear.toFixed(1)+' / yr', null, 'Total number of completed round-trip trades (entry plus exit) over the full backtest.'),
+    metricCard('Win Rate', fmtPct(m.winRate), null, m.totalTrades+' closed trades', m.winRate>=0.5?'pos':'neg', 'Share of closed trades that ended with a positive return.'),
     metricCard('Profit Factor', m.profitFactor==Infinity?'∞':(m.profitFactor!=null?m.profitFactor.toFixed(2):'—'), null, 'gross profit / gross loss', (m.profitFactor==null?'':(m.profitFactor>=1?'pos':'neg')), 'Sum of dollar gains on winning trades divided by the absolute sum of dollar losses on losing trades.'),
-    metricCard('Max Profit', fmtSignedPct(m.maxProfit), null, 'best single trade', 'pos'),
+    metricCard('Max Profit', fmtSignedPct(m.maxProfit), null, 'best single trade', 'pos', 'Largest percentage gain from any single closed trade in the backtest.'),
     metricCard('Min Profit (Positive)', fmtSignedPct(m.minProfitPositive), null, 'smallest winning trade', 'pos', 'The smallest return among trades that were still profitable — the "weakest win."'),
-    metricCard('Average Profit', fmtSignedPct(m.avgProfit), null, 'mean return, all trades', m.avgProfit>=0?'pos':'neg')
+    metricCard('Average Profit', fmtSignedPct(m.avgProfit), null, 'mean return, all trades', m.avgProfit>=0?'pos':'neg', 'Mean percentage return across every closed trade, wins and losses combined.')
   ].join('');
 
   $('grpDrawdown').innerHTML = [
-    metricCard('Max Drawdown', fmtPct(m.maxDrawdown), fmtPct(h.maxDrawdown), 'deepest peak-to-trough', 'neg'),
+    metricCard('Max Drawdown', fmtPct(m.maxDrawdown), fmtPct(h.maxDrawdown), 'deepest peak-to-trough', 'neg', 'The largest peak-to-trough decline in equity observed at any point in the backtest.'),
     metricCard('Min Drawdown', fmtPct(m.minDrawdown), fmtPct(h.minDrawdown), 'shallowest episode', 'neg', 'The smallest-magnitude decline among completed drawdown episodes.'),
-    metricCard('Average Drawdown', fmtPct(m.avgDrawdown), fmtPct(h.avgDrawdown), m.eps.length+' episodes', 'neg'),
+    metricCard('Average Drawdown', fmtPct(m.avgDrawdown), fmtPct(h.avgDrawdown), m.eps.length+' episodes', 'neg', 'Mean depth of all completed drawdown episodes, from peak through trough to recovery.'),
     metricCard('True Drawdown', fmtPct(m.trueDrawdown), fmtPct(h.trueDrawdown), 'live, from all-time high', m.trueDrawdown>=-0.0001?'pos':'neg', 'Current distance below the all-time equity high, as of the most recent bar. 0% means presently at a new high.')
   ].join('');
 
@@ -2726,11 +2726,11 @@ function renderMetrics(){
   ].join('');
 
   $('grpTiming').innerHTML = [
-    metricCard('Max Consecutive Wins', m.maxWinStreak, null, null, 'pos'),
-    metricCard('Max Consecutive Losses', m.maxLossStreak, null, null, 'neg'),
+    metricCard('Max Consecutive Wins', m.maxWinStreak, null, null, 'pos', 'Longest streak of back-to-back winning trades.'),
+    metricCard('Max Consecutive Losses', m.maxLossStreak, null, null, 'neg', 'Longest streak of back-to-back losing trades.'),
     metricCard('Profit Hold Time', m.profitHold!=null?m.profitHold.toFixed(1)+' d':'—', null, 'avg. winning trade', null, 'Average number of days a winning trade was held from entry to exit.'),
     metricCard('Drawdown Hold Time', m.lossHold!=null?m.lossHold.toFixed(1)+' d':'—', null, 'avg. losing trade', null, 'Average number of days a losing trade was held from entry to exit.'),
-    metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', null, 'min – max across all trades')
+    metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', null, 'min – max across all trades', null, 'Shortest and longest holding periods, in days, across all closed trades.')
   ].join('');
 }
 
@@ -2747,9 +2747,9 @@ function renderFilterImpact(){
   const sub = (withV, baseV, fmt) => filterOn ? ('baseline: '+fmt(baseV)) : 'filter is off — identical to baseline';
 
   $('grpFilterImpact').innerHTML = [
-    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), null, sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true)),
-    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), null, sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true)),
-    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), null, sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false)),
+    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), null, sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true), 'Final equity for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
+    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), null, sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true), 'Compound annual growth rate for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
+    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), null, sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false), 'Max drawdown for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
     metricCard('Total Trades (Filtered)', m.totalTrades, null, sub(m.totalTrades,b.totalTrades,(v)=>String(v)), null, 'Trade count often drops under the filter — that\'s the gate/force-exit doing its job, not a bug.')
   ].join('');
 }
