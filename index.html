@@ -2675,8 +2675,11 @@ function renderAnalysisTab(){
 /* ======================================================================
    RENDER: METRICS
 ====================================================================== */
+function escAttr(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function metricCard(label, val, holdVal, sub, cls, tip){
-  const tipHtml = tip ? ` <span class="info-icon" title="${tip}">i</span>` : '';
+  const tipHtml = tip ? ` <span class="info-icon" title="${escAttr(tip)}">i</span>` : '';
   return `<tr>
     <td class="mt-label">${label}${tipHtml}</td>
     <td class="mt-val ${cls||''}">${val}</td>
