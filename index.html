@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 /* ============================= TOKENS ============================= */
@@ -569,6 +570,11 @@ tr:hover td{background:var(--surface-2);}
           <button class="pill active" data-shade="on">MVRV BG</button>
           <button class="pill" data-shade="off">OFF</button>
         </div>
+        <div class="pillgroup" id="priceZoomGroup">
+          <button class="pill" id="zoomOutBtn" title="Zoom out">−</button>
+          <button class="pill" id="zoomResetBtn" title="Reset zoom">RESET</button>
+          <button class="pill" id="zoomInBtn" title="Zoom in">+</button>
+        </div>
       </div>
     </div>
     <div class="chart-box">
@@ -577,6 +583,10 @@ tr:hover td{background:var(--surface-2);}
       <div id="entryPreviewLine" style="position:absolute; width:0; border-left:1.5px dashed var(--violet); display:none; pointer-events:none; z-index:4;"></div>
       <div id="entryPreviewDot" style="position:absolute; width:11px; height:11px; background:var(--violet); border:2px solid var(--bg); transform:translate(-50%,-50%) rotate(45deg); display:none; pointer-events:none; box-shadow:0 0 0 1px var(--violet), 0 2px 6px rgba(0,0,0,.45); z-index:5;"></div>
     </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+      <span class="mono" style="font-size:11px; color:var(--text-faint); flex:none;">◀ PAN ▶</span>
+      <input type="range" id="priceZoomSlider" min="0" max="1000" value="0" step="1" style="width:100%; accent-color:var(--cyan); cursor:pointer;" disabled title="Pan the zoomed chart left/right">
+    </div>
     <div class="legend-row">
       <div class="legend-item"><span class="legend-swatch" style="background:var(--text-dim)"></span> BTC / USD</div>
       <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span> EMA Fast</div>
@@ -584,6 +594,7 @@ tr:hover td{background:var(--surface-2);}
       <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Buy signal</div>
       <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> Sell signal</div>
       <div class="legend-item"><span class="legend-dot" style="background:var(--violet)"></span> Entry point</div>
+      <div class="legend-item" style="color:var(--text-faint);">drag to zoom · scroll/pinch to zoom · shift+drag to pan</div>
       <div class="legend-item" id="regimeLegend" style="margin-left:auto;"></div>
     </div>
   </div>
@@ -912,6 +923,8 @@ tr:hover td{background:var(--surface-2);}
 <script>
 (function(){
 "use strict";
+
+if (window.Chart && window.ChartZoom){ Chart.register(window.ChartZoom); }
 
 /* ======================================================================
    STATE
@@ -1910,6 +1923,17 @@ function renderPriceChart(){
           titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
           padding:10,
           callbacks:{ label: (item)=> item.dataset.label+': $'+fmtUSD(item.parsed.y) }
+        },
+        zoom:{
+          limits:{ x:{ min:'original', max:'original', minRange: 10 } },
+          pan:{ enabled:true, mode:'x', modifierKey:'shift', onPanComplete:()=>syncPanSlider() },
+          zoom:{
+            wheel:{ enabled:true, speed:0.08 },
+            pinch:{ enabled:true },
+            drag:{ enabled:true, backgroundColor:hexAlpha(themeVar('--cyan'),0.12), borderColor:themeVar('--cyan'), borderWidth:1 },
+            mode:'x',
+            onZoomComplete:()=>syncPanSlider()
+          }
         }
       },
       scales: baseScales(gc, gc, state.priceScale)
@@ -1927,8 +1951,58 @@ function renderPriceChart(){
     charts.price.update('none');
   }
   syncRegimeShadeUI();
+  syncPanSlider();
   requestAnimationFrame(renderCycleDividers);
 }
+
+// Horizontal "◀ PAN ▶" slider below the price chart — a scrollbar for
+// whatever zoom level chartjs-plugin-zoom currently has active. Disabled
+// when the chart isn't zoomed in (nothing to pan across). Kept fully
+// separate from the violet Entry Date Simulator slider, which controls
+// the backtest's start date, not the chart viewport.
+//
+// IMPORTANT: the chart's x scale indexes into whatever slice is currently
+// loaded (chart.data.labels), NOT the full RAW dataset — sliceRange()
+// returns positions in RAW's index space, which is a different (usually
+// much larger) range and would send zoomScale wildly out of bounds. So
+// the "full" range here is always [0, labels.length-1].
+function syncPanSlider(){
+  const slider = $('priceZoomSlider');
+  const chart = charts.price;
+  if (!chart || !chart.scales || !chart.scales.x || !chart.data.labels || !chart.data.labels.length){
+    slider.disabled = true;
+    return;
+  }
+  const xs = chart.scales.x;
+  const fullSpan = chart.data.labels.length - 1;
+  const winMin = xs.min, winMax = xs.max;
+  const winSpan = winMax - winMin;
+  if (!(fullSpan > 0) || !(winSpan > 0) || winSpan >= fullSpan - 0.001){
+    slider.disabled = true;
+    slider.value = 0;
+    return;
+  }
+  slider.disabled = false;
+  const maxOffset = fullSpan - winSpan;
+  const pct = Math.max(0, Math.min(1, winMin / maxOffset));
+  if (!panSliderDragging) slider.value = Math.round(pct * 1000);
+}
+
+let panSliderDragging = false;
+function panChartFromSlider(){
+  const chart = charts.price;
+  if (!chart || !chart.scales || !chart.scales.x || !chart.data.labels) return;
+  const xs = chart.scales.x;
+  const fullSpan = chart.data.labels.length - 1;
+  const winSpan = xs.max - xs.min;
+  if (!(fullSpan > 0) || winSpan >= fullSpan - 0.001) return;
+  const maxOffset = fullSpan - winSpan;
+  const pct = Number($('priceZoomSlider').value) / 1000;
+  const newMin = pct * maxOffset;
+  const newMax = newMin + winSpan;
+  chart.zoomScale('x', { min:newMin, max:newMax }, 'none');
+}
+
 
 // Keeps the "MVRV BG" toggle and its legend honest: greys out and explains
 // itself when the MVRV filter is off (shading would have nothing real to
@@ -2937,6 +3011,7 @@ function wireEvents(){
         }
         initEntrySlider();
         recompute();
+        if (charts.price){ charts.price.resetZoom(); syncPanSlider(); }
         if (state.activeTab === 'analysis') renderAnalysisTab();
       }catch(err){
         $('statusLine').innerHTML = '<span style="color:var(--red)">●</span> failed to load '+TF_LABELS[tf].toLowerCase()+' dataset';
@@ -2950,8 +3025,18 @@ function wireEvents(){
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('#priceRangeGroup .pill').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active'); state.priceRange = btn.dataset.range; renderPriceChart();
+      if (charts.price){ charts.price.resetZoom(); syncPanSlider(); }
     });
   });
+
+  $('zoomInBtn').addEventListener('click', ()=>{ if (charts.price){ charts.price.zoom(1.3); syncPanSlider(); } });
+  $('zoomOutBtn').addEventListener('click', ()=>{ if (charts.price){ charts.price.zoom(0.7); syncPanSlider(); } });
+  $('zoomResetBtn').addEventListener('click', ()=>{ if (charts.price){ charts.price.resetZoom(); syncPanSlider(); } });
+
+  const panSlider = $('priceZoomSlider');
+  panSlider.addEventListener('pointerdown', ()=>{ panSliderDragging = true; });
+  window.addEventListener('pointerup', ()=>{ panSliderDragging = false; });
+  panSlider.addEventListener('input', panChartFromSlider);
 
   document.querySelectorAll('#analysisRangeGroup .pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
