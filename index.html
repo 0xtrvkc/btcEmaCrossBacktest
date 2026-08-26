@@ -331,6 +331,84 @@ tr:hover td{background:var(--surface-2);}
   .hvt-grid{grid-template-columns:1fr;}
   .ticker-cell{min-width:100%;}
 }
+
+/* ============================= CP77 SECRET POPUP ============================= */
+.cp77-overlay{
+  position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+  pointer-events:none; opacity:0; background:radial-gradient(ellipse at 50% 50%, rgba(10,4,20,.55), rgba(0,0,0,.75));
+  transition:opacity .35s ease;
+}
+.cp77-overlay.show{opacity:1;}
+.cp77-overlay.hide{opacity:0;}
+.cp77-scanlines{
+  position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0px, rgba(255,255,255,.05) 1px, transparent 2px, transparent 4px);
+  mix-blend-mode:overlay; animation:cp77ScanMove 6s linear infinite;
+}
+.cp77-scanlines::after{
+  content:''; position:absolute; left:0; right:0; height:120px; top:-120px;
+  background:linear-gradient(180deg, transparent, rgba(252,238,10,.08), transparent);
+  animation:cp77Sweep 2.4s ease-in-out infinite;
+}
+@keyframes cp77ScanMove{ 0%{background-position-y:0;} 100%{background-position-y:200px;} }
+@keyframes cp77Sweep{ 0%{transform:translateY(0);} 100%{transform:translateY(900px);} }
+.cp77-box{
+  position:relative; padding:34px 46px; border:1px solid rgba(252,238,10,.5);
+  background:linear-gradient(180deg, rgba(8,6,14,.88), rgba(4,3,8,.92));
+  box-shadow:0 0 0 1px rgba(0,255,255,.15), 0 0 40px rgba(252,238,10,.18), 0 0 90px rgba(255,0,153,.10);
+  text-align:center; min-width:340px; transform:scale(.94); transition:transform .35s cubic-bezier(.2,1.4,.4,1);
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
+}
+.cp77-overlay.show .cp77-box{transform:scale(1);}
+.cp77-bar{height:2px; background:linear-gradient(90deg, transparent, #fcee0a, #00f6ff, #ff0059, transparent); opacity:.85;}
+.cp77-bar:first-child{margin-bottom:16px;}
+.cp77-bar:last-child{margin-top:14px;}
+.cp77-sub{
+  margin-top:10px; font-family:var(--mono); font-size:11px; letter-spacing:1.5px; color:#00f6ff;
+  text-transform:uppercase; opacity:.85; animation:cp77Flicker 2.4s infinite steps(1);
+}
+.cp77-glitch{
+  position:relative; font-family:var(--mono); font-weight:800; font-size:38px; letter-spacing:4px;
+  color:#f5f8ff; text-transform:uppercase; animation:cp77Flicker 1.8s infinite steps(1);
+  text-shadow:0 0 6px rgba(252,238,10,.6), 0 0 24px rgba(0,246,255,.25);
+}
+.cp77-glitch::before, .cp77-glitch::after{
+  content:attr(data-text); position:absolute; left:0; top:0; width:100%; height:100%;
+  background:transparent; overflow:hidden;
+}
+.cp77-glitch::before{
+  color:#00f6ff; left:2px; clip-path:inset(0 0 60% 0); animation:cp77GlitchTop 2.6s infinite linear;
+}
+.cp77-glitch::after{
+  color:#ff0059; left:-2px; clip-path:inset(50% 0 0 0); animation:cp77GlitchBottom 2.9s infinite linear;
+}
+@keyframes cp77GlitchTop{
+  0%,100%{clip-path:inset(0 0 88% 0); transform:translate(0,0);}
+  10%{clip-path:inset(12% 0 60% 0); transform:translate(-3px,-1px);}
+  20%{clip-path:inset(55% 0 10% 0); transform:translate(2px,1px);}
+  30%{clip-path:inset(2% 0 80% 0); transform:translate(-2px,0);}
+  40%{clip-path:inset(70% 0 5% 0); transform:translate(3px,-2px);}
+  55%{clip-path:inset(30% 0 45% 0); transform:translate(-1px,1px);}
+  70%{clip-path:inset(0 0 88% 0); transform:translate(0,0);}
+}
+@keyframes cp77GlitchBottom{
+  0%,100%{clip-path:inset(85% 0 0 0); transform:translate(0,0);}
+  15%{clip-path:inset(45% 0 20% 0); transform:translate(3px,1px);}
+  25%{clip-path:inset(70% 0 0 0); transform:translate(-3px,-1px);}
+  40%{clip-path:inset(20% 0 55% 0); transform:translate(2px,2px);}
+  50%{clip-path:inset(80% 0 2% 0); transform:translate(-2px,0);}
+  65%{clip-path:inset(60% 0 15% 0); transform:translate(1px,-1px);}
+  80%{clip-path:inset(85% 0 0 0); transform:translate(0,0);}
+}
+@keyframes cp77Flicker{
+  0%,19%,21%,23%,55%,57%,100%{opacity:1;}
+  20%,22%,56%{opacity:.35;}
+  90%{opacity:.7;}
+}
+@media(max-width:640px){
+  .cp77-box{min-width:0; width:86%; padding:26px 20px;}
+  .cp77-glitch{font-size:26px; letter-spacing:2px;}
+}
 </style>
 </head>
 <body data-theme="dark">
@@ -3304,6 +3382,84 @@ async function boot(){
   }
 }
 boot();
+
+/* ======================================================================
+   SECRET COMMAND — type "iii" to snap into a preset config
+====================================================================== */
+(function(){
+  let iCount = 0, iTimer = null;
+
+  function isEditable(el){
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (isEditable(e.target)) { iCount = 0; return; }
+    if (e.key && e.key.toLowerCase() === 'i'){
+      iCount++;
+      clearTimeout(iTimer);
+      iTimer = setTimeout(()=>{ iCount = 0; }, 1000);
+      if (iCount >= 3){
+        iCount = 0;
+        clearTimeout(iTimer);
+        activateSecretPreset();
+      }
+    } else {
+      iCount = 0;
+      clearTimeout(iTimer);
+    }
+  });
+
+  function activateSecretPreset(){
+    // MVRV REGIME FILTER -> Gate (thresholds stay default)
+    const gateBtn = document.querySelector('.tab-btn[data-mvrvmode="gate"]');
+    if (gateBtn && !gateBtn.classList.contains('active')) gateBtn.click();
+
+    // RISK MANAGEMENT / Vol-Targeted Sizing -> On (target % stays default)
+    const volOnBtn = document.querySelector('.tab-btn[data-volmode="on"]');
+    if (volOnBtn && !volOnBtn.classList.contains('active')) volOnBtn.click();
+
+    // ENTRY DATE SIMULATOR -> Dec 16 2021, 12:00 AM
+    if (RAW.dates && RAW.dates.length){
+      const target = '2021-12-16';
+      let idx = RAW.dates.findIndex(d => d >= target);
+      if (idx < 0) idx = RAW.dates.length - 1;
+      applySliderIndex(idx);
+      recompute();
+    }
+
+    showWelcomeBackPopup();
+  }
+
+  function showWelcomeBackPopup(){
+    const prev = document.getElementById('cp77Overlay');
+    if (prev) prev.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'cp77-overlay';
+    overlay.id = 'cp77Overlay';
+    overlay.innerHTML =
+      '<div class="cp77-scanlines"></div>' +
+      '<div class="cp77-box">' +
+        '<div class="cp77-bar"></div>' +
+        '<div class="cp77-glitch" data-text="WELCOME BACK">WELCOME BACK</div>' +
+        '<div class="cp77-sub">// PRESET.EXEC — MVRV:GATE · VOL-SIZE:ON · ENTRY:2021-12-16</div>' +
+        '<div class="cp77-bar"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(()=>{ overlay.classList.add('show'); });
+
+    setTimeout(()=>{
+      overlay.classList.remove('show');
+      overlay.classList.add('hide');
+      setTimeout(()=>{ overlay.remove(); }, 400);
+    }, 2400);
+  }
+})();
 
 })();
 </script>
