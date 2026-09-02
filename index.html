@@ -240,6 +240,17 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
   .trade-analytics-grid{grid-template-columns:1fr; gap:24px;}
 }
 
+/* ============================= TIME UNDERWATER ============================= */
+.tu-grid{display:grid; grid-template-columns:200px 1fr; gap:20px; align-items:center;}
+.tu-donut-wrap{position:relative; height:200px;}
+.tu-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;}
+.tu-center-val{font-family:var(--mono); font-size:22px; font-weight:800; color:var(--red);}
+.tu-center-label{font-family:var(--mono); font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.4px; margin-top:2px;}
+.tu-stats-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+@media(max-width:640px){
+  .tu-grid{grid-template-columns:1fr;}
+}
+
 /* ============================= MONTHLY HEATMAP ============================= */
 .heatmap-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
 .heatmap-table{border-collapse:separate; border-spacing:3px; width:100%; min-width:640px; font-family:var(--mono);}
@@ -725,6 +736,50 @@ tr:hover td{background:var(--surface-2);}
     </div>
   </div>
 
+  <!-- ============ DRAWDOWN EPISODES ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--red)"></span> DRAWDOWN EPISODES</div>
+    </div>
+    <div class="trade-analytics-grid">
+      <div>
+        <div class="sub-chart-label">Depth vs. Duration</div>
+        <div class="chart-box short"><canvas id="ddEpisodeScatterChart"></canvas></div>
+      </div>
+      <div>
+        <div class="sub-chart-label">Recent Episodes: Drop vs. Gain Needed to Recover</div>
+        <div class="chart-box short"><canvas id="ddRecoveryBarChart"></canvas></div>
+      </div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--red)"></span> Recovered episode</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span> Ongoing (not yet recovered)</div>
+      <div class="legend-item" style="color:var(--text-faint)">Recovery gain = drop ÷ (1 − drop) — a −50% drawdown needs +100% to break even, not +50%</div>
+    </div>
+  </div>
+
+  <!-- ============ TIME UNDERWATER ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--red)"></span> TIME UNDERWATER</div>
+    </div>
+    <div class="tu-grid">
+      <div class="tu-donut-wrap">
+        <canvas id="timeUnderwaterChart"></canvas>
+        <div class="tu-center"><div class="tu-center-val" id="tuCenterPct">—</div><div class="tu-center-label">of time<br>underwater</div></div>
+      </div>
+      <div class="tu-stats-grid">
+        <div class="hvt-card trading"><div class="hvt-title">Days Underwater</div><div class="hvt-main num" id="tuUnderwaterDays">—</div></div>
+        <div class="hvt-card gain"><div class="hvt-title">Days At / Near High</div><div class="hvt-main num" id="tuAtHighDays">—</div></div>
+        <div class="hvt-card hold"><div class="hvt-title">Longest Episode</div><div class="hvt-main num" id="tuLongestEp" style="font-size:16px;">—</div></div>
+        <div class="hvt-card then"><div class="hvt-title">Current Episode</div><div class="hvt-main num" id="tuCurrentEp" style="font-size:16px;">—</div></div>
+      </div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item" style="color:var(--text-faint)">Measured in real elapsed calendar time, not bar count — correct at any timeframe (1h/4h/1d)</div>
+    </div>
+  </div>
+
   <!-- ============ METRICS ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -769,6 +824,18 @@ tr:hover td{background:var(--surface-2);}
     <div class="legend-row" id="heatmapLegend"></div>
   </div>
 
+  <!-- ============ UNDERWATER HEATMAP ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--red)"></span> UNDERWATER HEATMAP</div>
+      <div class="chart-tools">
+        <div class="legend-item" style="color:var(--text-faint); font-size:11px;">Worst drawdown touched, per month</div>
+      </div>
+    </div>
+    <div id="ddHeatmapWrap" class="heatmap-wrap"></div>
+    <div class="legend-row" id="ddHeatmapLegend"></div>
+  </div>
+
   <!-- ============ ROLLING RETURN ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -787,6 +854,26 @@ tr:hover td{background:var(--surface-2);}
       <div class="legend-item"><span class="legend-swatch" style="background:var(--violet)"></span> <span id="rollingLegendStrat">Strategy — trailing 365d return</span></div>
       <div class="legend-item"><span class="legend-swatch" style="background:var(--text-faint); opacity:.8"></span> <span id="rollingLegendHold">Buy &amp; Hold — trailing 365d return</span></div>
       <div class="legend-item" style="color:var(--text-faint)">Y-axis clipped to the 1st–99th percentile range for readability</div>
+    </div>
+  </div>
+
+  <!-- ============ ROLLING RISK ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--amber)"></span> ROLLING RISK</div>
+    </div>
+    <div class="trade-analytics-grid">
+      <div>
+        <div class="sub-chart-label">Rolling Max Drawdown</div>
+        <div class="chart-box short"><canvas id="rollingDrawdownChart"></canvas></div>
+      </div>
+      <div>
+        <div class="sub-chart-label">Rolling 180d Sharpe</div>
+        <div class="chart-box short"><canvas id="rollingSharpeChart"></canvas></div>
+      </div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item" style="color:var(--text-faint)">Left: worst peak-to-trough decline using only the local peak within the trailing window (not the all-time high) — shows if recent risk is elevated. Right: annualized return ÷ annualized volatility over the trailing 180 days.</div>
     </div>
   </div>
 
@@ -838,6 +925,17 @@ tr:hover td{background:var(--surface-2);}
       <div class="legend-item"><span class="legend-swatch" style="background:var(--green)"></span> Winning trades</div>
       <div class="legend-item"><span class="legend-swatch" style="background:var(--red)"></span> Losing trades</div>
       <div class="legend-item" style="color:var(--text-faint)">Left: trade count by P&amp;L bucket. Right: each dot is one closed trade.</div>
+    </div>
+  </div>
+
+  <!-- ============ REALIZED P&L BREAKDOWN ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--green)"></span> REALIZED P&amp;L BREAKDOWN</div>
+    </div>
+    <div class="chart-box short"><canvas id="realizedPnlChart"></canvas></div>
+    <div class="legend-row">
+      <div class="legend-item" style="color:var(--text-faint)">Cumulative P&amp;L from closed trades only — excludes unrealized mark-to-market on any open position, so it won't exactly match the equity curve above.</div>
     </div>
   </div>
 
@@ -1025,7 +1123,8 @@ const HALVING_DATES = [
 let DATA_URL = TF_URLS['4h'];
 let RAW = { dates: [], prices: [], mvrv: [] };  // full parsed series, ascending by date
 let MVRV_BY_DATE = null; // Map<'YYYY-MM-DD', number> — fetched once, reused across timeframe switches
-let charts = { price:null, equity:null, rolling:null, mvrv:null, drawdown:null, pnlHist:null, durationScatter:null, rsi:null, macd:null, trendEff:null, atr:null, bb:null };
+let charts = { price:null, equity:null, rolling:null, mvrv:null, drawdown:null, pnlHist:null, durationScatter:null, rsi:null, macd:null, trendEff:null, atr:null, bb:null,
+  ddEpisodeScatter:null, ddRecoveryBar:null, timeUnderwater:null, rollingDrawdown:null, rollingSharpe:null, realizedPnl:null };
 let ANALYSIS = null; // { rsi, macd:{macdLine,signalLine,hist}, trendEff, atr, bb:{mid,upper,lower} } — computed once per data load
 let lastEntrySpanDays = 0; // days between current Entry Date and the last available bar — used by updateRollWindowCap
 let state = {
@@ -1567,6 +1666,141 @@ function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosi
 }
 
 /* ======================================================================
+   DRAWDOWN — EXTRA ANALYTICS (episode economics, time underwater,
+   rolling windowed drawdown, rolling risk-adjusted return, realized P&L)
+   All duration/window logic uses real elapsed calendar time (daysBetween /
+   parseTs), never a bar-index count, since the selected timeframe can be
+   1h/4h/1d — a fixed N-bar window means a different real duration at each.
+====================================================================== */
+
+// Per-episode economics: real-calendar duration (peak -> recovery, or "so far"
+// if still open) and the recovery gain required to get back to the prior peak.
+// Recovery gain uses the exact closed-form g = d/(1-d), where d is the drop
+// magnitude (0..1) — e.g. d=0.5 -> g=1.0 (a 50% loss needs a +100% gain to
+// recover), d=0.2 -> g=0.25. This is exact at any depth, not an approximation.
+function episodeEconomics(eps, dates){
+  return eps.map(e=>{
+    const d = Math.abs(e.val);
+    const recoveryGain = d < 1 ? d/(1-d) : Infinity;
+    const durationDays = daysBetween(dates[e.start], dates[e.end]);
+    return { ...e, recoveryGain, durationDays, startDate:dates[e.start], troughDate:dates[e.trough], endDate:dates[e.end] };
+  });
+}
+
+// Fraction of real elapsed time spent underwater vs. at/above the prior peak.
+// Integrates actual calendar time per bar-to-bar step, not bar counts, so it
+// stays correct regardless of timeframe.
+function computeTimeUnderwater(dates, dd, startIndex){
+  let underwaterMs = 0, atHighMs = 0;
+  const lastIdx = dates.length-1;
+  for (let i=startIndex;i<lastIdx;i++){
+    if (dd[i]==null) continue;
+    // Accumulate raw milliseconds, not daysBetween() per step — daysBetween
+    // rounds to whole days, which silently zeroes out every increment on a
+    // sub-daily timeframe (e.g. 4h bars: each step is 0.167d -> rounds to 0,
+    // and thousands of zeros sum to zero). Round only once, at the end.
+    const dtMs = parseTs(dates[i+1]).getTime() - parseTs(dates[i]).getTime();
+    if (dd[i] < -1e-9) underwaterMs += dtMs; else atHighMs += dtMs;
+  }
+  const underwaterDays = underwaterMs/86400000, atHighDays = atHighMs/86400000;
+  const totalDays = underwaterDays+atHighDays;
+  return { underwaterDays, atHighDays, totalDays, pctUnderwater: totalDays>0 ? underwaterDays/totalDays : null };
+}
+
+// Rolling *local* max drawdown: for each bar, the worst peak-to-trough decline
+// using only the peak equity within the trailing `windowDays` — unlike the
+// underwater chart (which always measures from the all-time high), this
+// answers "how bad has risk been lately" independent of an old high that may
+// be far in the past. Classic sliding-window-maximum via monotonic deque;
+// the window boundary is real elapsed time (two-pointer), same pattern as
+// rollingReturn() above, so it's correct for any bar spacing.
+function computeRollingDrawdown(dates, equity, startIndex, windowDays){
+  const n = equity.length;
+  const out = new Array(n).fill(null);
+  const windowMs = windowDays*86400000;
+  const deque = []; // indices; equity[deque[0]] is the current window's max
+  for (let i=startIndex;i<n;i++){
+    if (equity[i]==null) continue;
+    while (deque.length && equity[deque[deque.length-1]] <= equity[i]) deque.pop();
+    deque.push(i);
+    const windowStart = parseTs(dates[i]).getTime() - windowMs;
+    while (deque.length && parseTs(dates[deque[0]]).getTime() < windowStart) deque.shift();
+    const peak = equity[deque[0]];
+    out[i] = peak>0 ? equity[i]/peak - 1 : 0;
+  }
+  return out;
+}
+
+// Rolling Sharpe over a trailing calendar window, using the same daily
+// resampling + annualization convention (mean*365.25 / (std*sqrt(365.25)))
+// as computeRiskAdjustedMetrics() above, so this rolling line is directly
+// comparable to the single full-period Sharpe metric card. Requires at
+// least `minObs` daily return observations in the window, else null (gap
+// in the line) — avoids a handful of days producing a noisy annualized spike.
+function computeRollingSharpe(dates, equity, startIndex, windowDays, minObs=20){
+  const dayMap = new Map();
+  for (let i=startIndex;i<dates.length;i++){
+    if (equity[i]==null) continue;
+    dayMap.set(dates[i].slice(0,10), equity[i]);
+  }
+  const dayKeys = Array.from(dayMap.keys()).sort();
+  const dayVals = dayKeys.map(k=>dayMap.get(k));
+  const rets = [], retTs = [];
+  for (let i=1;i<dayVals.length;i++){
+    if (dayVals[i-1]>0){ rets.push(dayVals[i]/dayVals[i-1]-1); retTs.push(parseTs(dayKeys[i]).getTime()); }
+  }
+  const windowMs = windowDays*86400000;
+  const out = new Array(rets.length).fill(null);
+  let j=0, sum=0, sumSq=0;
+  for (let i=0;i<rets.length;i++){
+    sum += rets[i]; sumSq += rets[i]*rets[i];
+    const windowStart = retTs[i]-windowMs;
+    while (j<i && retTs[j] < windowStart){ sum -= rets[j]; sumSq -= rets[j]*rets[j]; j++; }
+    const count = i-j+1;
+    if (count >= minObs){
+      const mean = sum/count;
+      const variance = Math.max(0, sumSq/count - mean*mean);
+      const std = Math.sqrt(variance);
+      const annReturn = mean*365.25, annVol = std*Math.sqrt(365.25);
+      out[i] = annVol>0 ? annReturn/annVol : null;
+    }
+  }
+  return { labels: dayKeys.slice(1), values: out };
+}
+
+// Cumulative realized P&L, split into winning-trade and losing-trade
+// contributions. This is *realized* P&L from closed trades only — by
+// construction it will not match the equity curve exactly, since the equity
+// curve also reflects unrealized mark-to-market on any open position plus
+// idle cash. net = win+loss reconstructs the realized-P&L trajectory as a
+// sanity check that the split sums correctly.
+function computeRealizedPnlDecomposition(trades){
+  const sorted = [...trades].sort((a,b)=> parseTs(a.exitDate)-parseTs(b.exitDate));
+  let cumWin=0, cumLoss=0;
+  const labels=[], win=[], loss=[], net=[];
+  sorted.forEach(t=>{
+    if (t.pnlDollar>0) cumWin += t.pnlDollar; else cumLoss += t.pnlDollar;
+    labels.push(t.exitDate); win.push(cumWin); loss.push(cumLoss); net.push(cumWin+cumLoss);
+  });
+  return { labels, win, loss, net };
+}
+
+// Monthly "worst underwater point" — the deepest drawdown touched at any
+// point during each calendar month (min/most-negative of the dd series
+// within that month). Distinct from the Monthly Returns heatmap, which
+// shows the month's *return*, not how far underwater it got intra-month.
+function computeMonthlyUnderwaterHeatmap(dates, dd, startIndex){
+  const monthWorst = new Map();
+  for (let i=startIndex;i<dates.length;i++){
+    if (dd[i]==null) continue;
+    const key = dates[i].slice(0,7);
+    const cur = monthWorst.get(key);
+    if (cur===undefined || dd[i]<cur) monthWorst.set(key, dd[i]);
+  }
+  return monthWorst;
+}
+
+/* ======================================================================
    FETCH + INIT
 ====================================================================== */
 async function loadMvrvOnce(){
@@ -1799,6 +2033,11 @@ function recompute(){
   renderPriceChart();
   renderEquityChart();
   renderDrawdownChart();
+  renderDrawdownEpisodesCharts();
+  renderTimeUnderwaterPanel();
+  renderRollingRiskCharts();
+  renderRealizedPnlChart();
+  renderUnderwaterHeatmap();
   renderRollingChart();
   renderMvrvChart();
   renderMetrics();
@@ -2359,6 +2598,296 @@ function renderDrawdownChart(){
   } else {
     charts.drawdown = new Chart(ctx, cfg);
   }
+}
+
+/* ======================================================================
+   RENDER: DRAWDOWN EPISODES — depth vs. duration, and recovery economics
+====================================================================== */
+function renderDrawdownEpisodesCharts(){
+  const scatterCtx = $('ddEpisodeScatterChart').getContext('2d');
+  const barCtx = $('ddRecoveryBarChart').getContext('2d');
+  const { metrics } = lastResult;
+  const dates = RAW.dates;
+  const gc = gridColor();
+
+  if (!metrics.eps.length){
+    ['ddEpisodeScatter','ddRecoveryBar'].forEach(k=>{ if(charts[k]){ charts[k].destroy(); charts[k]=null; } });
+    scatterCtx.clearRect(0,0,scatterCtx.canvas.width, scatterCtx.canvas.height);
+    barCtx.clearRect(0,0,barCtx.canvas.width, barCtx.canvas.height);
+    return;
+  }
+  const eps = episodeEconomics(metrics.eps, dates);
+
+  const closedPts = eps.filter(e=>!e.ongoing).map(e=>({x:e.durationDays, y:e.val*100, e}));
+  const ongoingPts = eps.filter(e=>e.ongoing).map(e=>({x:e.durationDays, y:e.val*100, e}));
+
+  const scatterCfg = {
+    type:'scatter',
+    data:{ datasets:[
+      { label:'Recovered', data:closedPts, backgroundColor:hexAlpha(themeVar('--red'),0.75), borderColor:themeVar('--red'), pointRadius:5, pointHoverRadius:7 },
+      { label:'Ongoing', data:ongoingPts, backgroundColor:hexAlpha(themeVar('--amber'),0.9), borderColor:themeVar('--amber'), pointRadius:6, pointHoverRadius:8, pointStyle:'triangle' }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{
+            title:(items)=> items.length ? 'Peak: '+fmtDate(items[0].raw.e.startDate) : '',
+            label:(item)=> [ 'Depth: '+fmtPct(item.raw.e.val), 'Duration: '+item.raw.e.durationDays+' d'+(item.raw.e.ongoing?' (ongoing)':' (recovered)') ]
+          }
+        }
+      },
+      scales:{
+        x:{ title:{display:true, text:'Duration, peak → recovery (days)', color:textColor(), font:{family:'JetBrains Mono', size:10}}, grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ title:{display:true, text:'Depth (%)', color:textColor(), font:{family:'JetBrains Mono', size:10}}, max:0, grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}, callback:(v)=>v.toFixed(0)+'%'}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.ddEpisodeScatter){ const c=charts.ddEpisodeScatter; c.data=scatterCfg.data; c.options=scatterCfg.options; c.update('none'); }
+  else charts.ddEpisodeScatter = new Chart(scatterCtx, scatterCfg);
+
+  // Most recent episodes: the drop vs. the exact gain required to erase it
+  // (g = d/(1-d), see episodeEconomics — not a linear/approximate mirror).
+  const recent = eps.slice(-10);
+  const labels = recent.map(e=> fmtDate(e.startDate));
+  const depthData = recent.map(e=> e.val*100);
+  const recoverData = recent.map(e=> isFinite(e.recoveryGain) ? e.recoveryGain*100 : null);
+
+  const barCfg = {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'Drawdown depth', data:depthData, backgroundColor:hexAlpha(themeVar('--red'),0.75), borderRadius:3, maxBarThickness:22 },
+      { label:'Gain needed to recover', data:recoverData, backgroundColor:hexAlpha(themeVar('--green'),0.75), borderRadius:3, maxBarThickness:22 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{
+        legend:{display:true, position:'top', labels:{color:textColor(), font:{family:'JetBrains Mono', size:10.5}, boxWidth:10}},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.parsed.y==null ? item.dataset.label+': —' : item.dataset.label+': '+(item.parsed.y>=0?'+':'')+item.parsed.y.toFixed(1)+'%' }
+        }
+      },
+      scales:{
+        x:{ grid:{display:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{family:'JetBrains Mono', size:9.5}}, border:{color:gc} },
+        y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}, callback:(v)=>v.toFixed(0)+'%'}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.ddRecoveryBar){ const c=charts.ddRecoveryBar; c.data=barCfg.data; c.options=barCfg.options; c.update('none'); }
+  else charts.ddRecoveryBar = new Chart(barCtx, barCfg);
+}
+
+/* ======================================================================
+   RENDER: TIME UNDERWATER (donut + stats)
+====================================================================== */
+function renderTimeUnderwaterPanel(){
+  const ctx = $('timeUnderwaterChart').getContext('2d');
+  const { metrics, startIndex } = lastResult;
+  const tu = computeTimeUnderwater(RAW.dates, metrics.dd, startIndex);
+  const gc = gridColor();
+
+  const cfg = {
+    type:'doughnut',
+    data:{
+      labels:['Underwater','At / near new high'],
+      datasets:[{ data:[tu.underwaterDays, tu.atHighDays], backgroundColor:[hexAlpha(themeVar('--red'),0.8), hexAlpha(themeVar('--green'),0.8)], borderColor:themeVar('--bg-elevated'), borderWidth:2 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false, cutout:'68%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.label+': '+Math.round(item.parsed)+' d ('+(tu.totalDays>0 ? (item.parsed/tu.totalDays*100).toFixed(1) : '0')+'%)' }
+        }
+      }
+    }
+  };
+  if (charts.timeUnderwater){ const c=charts.timeUnderwater; c.data=cfg.data; c.options=cfg.options; c.update('none'); }
+  else charts.timeUnderwater = new Chart(ctx, cfg);
+
+  $('tuCenterPct').textContent = tu.pctUnderwater!=null ? (tu.pctUnderwater*100).toFixed(0)+'%' : '—';
+
+  const eps = metrics.eps;
+  const closedEps = eps.filter(e=>!e.ongoing);
+  const durOf = (e)=> daysBetween(RAW.dates[e.start], RAW.dates[e.end]);
+  const longest = closedEps.length ? closedEps.reduce((a,e)=> durOf(e) > durOf(a) ? e : a) : null;
+  const ongoing = eps.find(e=>e.ongoing);
+
+  $('tuUnderwaterDays').textContent = Math.round(tu.underwaterDays)+' d';
+  $('tuAtHighDays').textContent = Math.round(tu.atHighDays)+' d';
+  $('tuLongestEp').textContent = longest ? durOf(longest)+' d ('+fmtPct(longest.val)+' worst)' : '—';
+  $('tuCurrentEp').textContent = ongoing ? durOf(ongoing)+' d so far, now '+fmtPct(metrics.trueDrawdown) : 'At a new high';
+}
+
+/* ======================================================================
+   RENDER: ROLLING DRAWDOWN & ROLLING SHARPE
+====================================================================== */
+function renderRollingRiskCharts(){
+  const ddCtx = $('rollingDrawdownChart').getContext('2d');
+  const shCtx = $('rollingSharpeChart').getContext('2d');
+  const { bt, startIndex } = lastResult;
+  const gc = gridColor();
+
+  const dd90 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 90).slice(startIndex);
+  const dd180 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 180).slice(startIndex);
+  const labels = RAW.dates.slice(startIndex);
+
+  const ddCfg = {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'90d rolling max DD', data:dd90, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true },
+      { label:'180d rolling max DD', data:dd180, borderColor:themeVar('--red'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:true, position:'top', labels:{color:textColor(), font:{family:'JetBrains Mono', size:10}, boxWidth:10}},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.dataset.label+': '+fmtPct(item.parsed.y) }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:7, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ max:0, grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}, callback:(v)=>(v*100).toFixed(0)+'%'}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.rollingDrawdown){ const c=charts.rollingDrawdown; c.data=ddCfg.data; c.options=ddCfg.options; c.update('none'); }
+  else charts.rollingDrawdown = new Chart(ddCtx, ddCfg);
+
+  const sh = computeRollingSharpe(RAW.dates, bt.equity, startIndex, 180);
+  const shCfg = {
+    type:'line',
+    data:{ labels: sh.labels, datasets:[
+      { label:'180d rolling Sharpe', data:sh.values, borderColor:themeVar('--cyan'), backgroundColor:hexAlpha(themeVar('--cyan'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> 'Sharpe: '+(item.parsed.y!=null ? item.parsed.y.toFixed(2) : '—') }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:7, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.rollingSharpe){ const c=charts.rollingSharpe; c.data=shCfg.data; c.options=shCfg.options; c.update('none'); }
+  else charts.rollingSharpe = new Chart(shCtx, shCfg);
+}
+
+/* ======================================================================
+   RENDER: REALIZED P&L DECOMPOSITION (cumulative winners vs losers)
+====================================================================== */
+function renderRealizedPnlChart(){
+  const ctx = $('realizedPnlChart').getContext('2d');
+  const trades = lastResult.bt.trades;
+  const gc = gridColor();
+
+  if (!trades.length){
+    if (charts.realizedPnl){ charts.realizedPnl.destroy(); charts.realizedPnl=null; }
+    ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+    return;
+  }
+  const dec = computeRealizedPnlDecomposition(trades);
+
+  const cfg = {
+    type:'line',
+    data:{ labels: dec.labels, datasets:[
+      { label:'Cumulative winning trades', data:dec.win, borderColor:themeVar('--green'), backgroundColor:hexAlpha(themeVar('--green'),0.12), fill:true, borderWidth:1.6, pointRadius:0, tension:0, stepped:true },
+      { label:'Cumulative losing trades', data:dec.loss, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.12), fill:true, borderWidth:1.6, pointRadius:0, tension:0, stepped:true },
+      { label:'Net realized P&L', data:dec.net, borderColor:themeVar('--text'), borderWidth:1.4, borderDash:[4,3], pointRadius:0, tension:0, stepped:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:true, position:'top', labels:{color:textColor(), font:{family:'JetBrains Mono', size:10}, boxWidth:10}},
+        tooltip:{
+          backgroundColor: themeVar('--bg-elevated'), borderColor: gc, borderWidth:1,
+          titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
+          titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
+          padding:10,
+          callbacks:{ label:(item)=> item.dataset.label+': $'+fmtUSD(item.parsed.y) }
+        }
+      },
+      scales:{
+        x:{ grid:{color:gc, drawTicks:false}, ticks:{color:textColor(), maxRotation:0, autoSkip:true, maxTicksLimit:7, font:{family:'JetBrains Mono', size:10}}, border:{color:gc} },
+        y:{ grid:{color:gc}, ticks:{color:textColor(), font:{family:'JetBrains Mono', size:10}, callback:(v)=>'$'+fmtUSD(v,0)}, border:{color:gc} }
+      }
+    }
+  };
+  if (charts.realizedPnl){ const c=charts.realizedPnl; c.data=cfg.data; c.options=cfg.options; c.update('none'); }
+  else charts.realizedPnl = new Chart(ctx, cfg);
+}
+
+/* ======================================================================
+   RENDER: UNDERWATER HEATMAP (worst drawdown touched per month)
+====================================================================== */
+function renderUnderwaterHeatmap(){
+  const wrap = $('ddHeatmapWrap');
+  const { metrics, startIndex } = lastResult;
+  const monthWorst = computeMonthlyUnderwaterHeatmap(RAW.dates, metrics.dd, startIndex);
+  const keys = Array.from(monthWorst.keys()).sort();
+  if (!keys.length){ wrap.innerHTML = '<div style="color:var(--text-faint); font-size:12px; padding:8px 2px;">Not enough history yet.</div>'; $('ddHeatmapLegend').innerHTML=''; return; }
+
+  const years = Array.from(new Set(keys.map(k=>k.slice(0,4)))).sort();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const maxAbs = Math.max(0.02, ...Array.from(monthWorst.values()).map(v=>Math.abs(v)));
+
+  function cellColor(v){
+    const t = Math.min(1, Math.abs(v)/maxAbs);
+    const alpha = 0.15 + t*0.75;
+    return hexAlpha(themeVar('--red'), alpha);
+  }
+
+  let html = '<table class="heatmap-table"><thead><tr><th class="hm-year-h">Year</th>';
+  monthNames.forEach(m=> html += `<th>${m}</th>`);
+  html += '</tr></thead><tbody>';
+  years.forEach(y=>{
+    html += `<tr><td class="hm-year">${y}</td>`;
+    for (let m=1;m<=12;m++){
+      const key = y+'-'+String(m).padStart(2,'0');
+      if (!monthWorst.has(key)){ html += '<td class="hm-cell empty">·</td>'; continue; }
+      const v = monthWorst.get(key);
+      const bg = cellColor(v);
+      const txtColor = Math.abs(v)/maxAbs > 0.5 ? '#0a0e14' : 'var(--text)';
+      html += `<td class="hm-cell" style="background:${bg}; color:${txtColor};" title="${monthNames[m-1]} ${y}: worst ${fmtPct(v)}">${(v*100).toFixed(1)}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  $('ddHeatmapLegend').innerHTML =
+    '<div class="legend-item"><span class="legend-swatch" style="background:'+hexAlpha(themeVar('--red'),0.75)+'"></span> Deeper red = deeper drawdown touched that month</div>' +
+    '<div class="legend-item" style="color:var(--text-faint)">Worst (most negative) point reached at any time during the month, vs. the all-time high — not the month\'s return</div>';
 }
 
 /* ======================================================================
@@ -3178,6 +3707,8 @@ function wireEvents(){
     if (lastResult){
       renderPriceChart(); renderEquityChart(); renderDrawdownChart(); renderRollingChart(); renderMvrvChart();
       renderMonthlyHeatmap(); renderPnlHistogram(); renderDurationScatter();
+      renderDrawdownEpisodesCharts(); renderTimeUnderwaterPanel(); renderRollingRiskCharts();
+      renderRealizedPnlChart(); renderUnderwaterHeatmap();
     }
     if (state.activeTab === 'analysis') renderAnalysisTab();
   });
