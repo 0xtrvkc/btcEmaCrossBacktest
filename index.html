@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
@@ -441,6 +442,7 @@ tr:hover td{background:var(--surface-2);}
         <button class="pill" data-tf="1d">1D</button>
       </div>
       <div class="status-line" id="statusLine"><span class="spinner"></span> fetching 4-hour series</div>
+      <button class="btn-export" id="refreshDataBtn" type="button" title="Fetch the latest data again">Refresh</button>
       <button class="btn-export" id="exportSnapBtn" title="Export a summary snapshot as JPG" aria-label="Export summary snapshot as JPG">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         <span class="btn-export-label">Snapshot</span>
@@ -451,6 +453,7 @@ tr:hover td{background:var(--surface-2);}
     </div>
   </div>
 
+  <div id="runNotice" class="notes" role="status" aria-live="polite" style="padding:10px 0 16px;overflow-wrap:anywhere;"></div>
   <!-- ============ TICKER ============ -->
   <div class="ticker">
     <div class="ticker-cell">
@@ -509,7 +512,7 @@ tr:hover td{background:var(--surface-2);}
         <div class="suffix-wrap"><span>USD</span><input type="number" id="inCapital" value="10000" min="1" step="100"></div>
       </div>
       <div class="field">
-        <label>Fee / Trade <span class="info-icon" title="Round-trip friction cost, applied on both entry and exit notional. 0% = frictionless.">i</span></label>
+        <label>Fee / Fill <span class="info-icon" title="Percentage fee on each executed fill. A round trip pays this rate once on entry and once on exit. 0% excludes fees.">i</span></label>
         <div class="suffix-wrap"><span>%</span><input type="number" id="inFee" value="0" min="0" max="10" step="0.01"></div>
       </div>
       <div class="field">
@@ -517,17 +520,23 @@ tr:hover td{background:var(--surface-2);}
         <div class="suffix-wrap"><span>%</span><input type="number" id="inSizing" value="100" min="1" max="100" step="1"></div>
       </div>
       <div class="field">
-        <label>EMA Fast <span class="info-icon" title="Fast exponential moving average lookback, in days. Default 50.">i</span></label>
+        <label>EMA Fast <span class="info-icon" title="Fast exponential moving average lookback, in bars of the selected timeframe. Default 50.">i</span></label>
         <input type="number" id="inEmaFast" value="50" min="2" max="300" step="1">
       </div>
       <div class="field">
-        <label>EMA Slow <span class="info-icon" title="Slow exponential moving average lookback, in days. Default 200.">i</span></label>
-        <input type="number" id="inEmaSlow" value="200" min="5" max="500" step="1">
+        <label>EMA Slow <span class="info-icon" title="Slow exponential moving average lookback, in bars of the selected timeframe. Default 200.">i</span></label>
+        <input type="number" id="inEmaSlow" value="200" min="3" max="500" step="1">
       </div>
       <div class="field">
         <label>Backtest Start <span class="info-icon" title="Earliest date the backtest may begin. Actual start is whichever is later: this date, or the day the slow EMA first becomes valid.">i</span></label>
         <input type="date" id="inStartDate" value="2012-01-01">
       </div>
+    </div>
+    <div class="controls-grid" style="margin-top:14px;">
+      <div class="field"><label>Slippage / Fill <span class="info-icon" title="Adverse price adjustment on every entry and exit. This is a scenario assumption, not historical spread data.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inSlippage" value="0" min="0" max="5" step="0.01"></div></div>
+      <div class="field"><label>Short Carry / Year <span class="info-icon" title="Annual cost on short notional, integrated over elapsed time. Zero excludes funding/borrow cost; this does not reproduce an exchange funding history.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inShortCarry" value="0" min="0" max="100" step="0.1"></div></div>
+      <div class="field"><label>Risk-free Rate / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inRiskFree" value="0" min="-99" max="100" step="0.1"></div></div>
+      <div class="field"><label>Sortino Target / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inDownsideTarget" value="0" min="-99" max="100" step="0.1"></div></div>
     </div>
   </div>
 
@@ -546,27 +555,31 @@ tr:hover td{background:var(--surface-2);}
     </div>
     <div class="controls-grid" style="grid-template-columns:repeat(4,1fr); margin-top:14px;">
       <div class="field">
-        <label>Long Reduce Above <span class="info-icon" title="Gate: blocks new long entries once MVRV is above this. Scale: size begins tapering down above this level.">i</span></label>
+        <label>Long Reduce Above <span class="info-icon" title="Gate: blocks new long entries once MVRV is above this. Scale: new-entry size begins tapering down above this level.">i</span></label>
         <input type="number" id="inMvrvLongReduce" value="2.0" min="0" max="10" step="0.1">
       </div>
       <div class="field">
-        <label>Long Exit Above <span class="info-icon" title="Force-closes an open long the moment MVRV crosses above this, even without an EMA death cross. Historically every cycle top has occurred with MVRV between ~2.7 and ~8.">i</span></label>
+        <label>Long Exit Above <span class="info-icon" title="Queues a long exit at the next available close when the lagged MVRV reading reaches this level. This is a configurable heuristic, not a fitted cycle-top estimate.">i</span></label>
         <input type="number" id="inMvrvLongExit" value="3.0" min="0" max="10" step="0.1">
       </div>
       <div class="field">
-        <label>Short Reduce Below <span class="info-icon" title="Gate: blocks new short entries once MVRV is below this. Scale: short size begins tapering down below this level.">i</span></label>
+        <label>Short Reduce Below <span class="info-icon" title="Gate: blocks new short entries once MVRV is below this. Scale: new short-entry size begins tapering down below this level.">i</span></label>
         <input type="number" id="inMvrvShortReduce" value="1.2" min="0" max="10" step="0.1">
       </div>
       <div class="field">
-        <label>Short Exit Below <span class="info-icon" title="Force-closes an open short the moment MVRV crosses below this. Historically every cycle bottom has occurred with MVRV between ~0.4 and ~1.1.">i</span></label>
+        <label>Short Exit Below <span class="info-icon" title="Queues a short exit at the next available close when lagged MVRV reaches this level. Zero is permitted and disables a positive-ratio threshold exit.">i</span></label>
         <input type="number" id="inMvrvShortExit" value="0.7" min="0" max="10" step="0.1">
       </div>
     </div>
+    <div class="controls-grid" style="margin-top:14px;">
+      <div class="field"><label>MVRV Delay (UTC days) <span class="info-icon" title="An observation is eligible no earlier than this many calendar days after its UTC date. The source publication lag is unknown; increase this conservative assumption if needed.">i</span></label><input type="number" id="inMvrvLag" value="1" min="1" max="30" step="1"></div>
+      <div class="field"><label>MVRV Maximum Age (days) <span class="info-icon" title="Age since the original timestamp. Older readings are unavailable: new entries are blocked and open positions exit at the next available close.">i</span></label><input type="number" id="inMvrvAge" value="3" min="1" max="60" step="1"></div>
+    </div>
     <div class="notes" style="margin-top:12px;">
-      <b>Gate</b> — blocks new entries once MVRV is past the "Reduce" threshold; force-exits open positions past the "Exit" threshold. Binary on/off.<br>
-      <b>Scale</b> — linearly tapers position size between the Reduce and Exit thresholds (100% → 0%) instead of a hard cutoff; still force-exits past the Exit threshold.<br>
-      <b>Why</b> — EMA cross is a lagging trend signal; MVRV is a valuation regime signal derived from on-chain cost basis, largely independent of price action alone. Gating entries by valuation avoids buying strength late in a euphoric MVRV zone and avoids shorting strength late in a capitulation MVRV zone.<br>
-      <b>Caution</b> — thresholds above are calibrated against only 4 completed BTC cycles (see MVRV summary export). Treat this as a risk overlay, not an optimized parameter — validate any threshold change out-of-sample before trusting the backtested edge.
+      <b>Gate</b> — blocks new entries beyond Reduce and queues exits at the Exit threshold.<br>
+      <b>Scale</b> — sizes new entries between Reduce and Exit; existing BTC quantity stays fixed until exit. All orders fill at the next available close.<br>
+      <b>Availability</b> — daily MVRV is delayed by the configured UTC calendar days and expires at the maximum age. The actual publication lag must be verified against the data source.<br>
+      <b>Interpretation</b> — MVRV adds realized-cost information, but its market-value numerator also depends on price. Thresholds are research assumptions and are not calibrated automatically from BTC cycles.
     </div>
   </div>
 
@@ -577,7 +590,7 @@ tr:hover td{background:var(--surface-2);}
     </div>
     <div class="controls-grid" style="grid-template-columns:repeat(4,1fr);">
       <div class="field">
-        <label>ATR Trailing Stop <span class="info-icon" title="When on, tracks the highest close since entry (long) or lowest close since entry (short) and exits the moment price gives back Multiplier × Close-ATR(14) from that extreme — independent of the EMA cross. Runs every bar, so it can cut a trade well before a lagging cross would.">i</span></label>
+        <label>ATR Trailing Stop <span class="info-icon" title="Uses the best close since entry and a 14-bar close-move proxy. The stop can tighten but never loosen; an observed trigger exits at the next available close. Intrabar highs/lows are unavailable.">i</span></label>
         <div class="tabs" style="padding:3px;">
           <button class="tab-btn active" data-atrmode="off" style="font-size:11.5px; padding:7px 8px;">Off</button>
           <button class="tab-btn" data-atrmode="on" style="font-size:11.5px; padding:7px 8px;">On</button>
@@ -588,20 +601,20 @@ tr:hover td{background:var(--surface-2);}
         <input type="number" id="inAtrMult" value="3.0" min="0.5" max="10" step="0.1">
       </div>
       <div class="field">
-        <label>Vol-Targeted Sizing <span class="info-icon" title="When on, position size is scaled by Target Volatility ÷ current Close-ATR(14)-as-%-of-price, clamped to 0.25×–1.75× the base Sizing/Trade. Shrinks size automatically when volatility is elevated (typically right before/during drawdown-prone periods) and lets it run closer to full size when volatility is calm.">i</span></label>
+        <label>Vol-Targeted Sizing <span class="info-icon" title="Scales the entry cash budget by target daily volatility / sample standard deviation of 14 complete daily returns. Multiplier is bounded to 0.25–1.75 and total budget including fees is capped at 100% of available cash. No entry until the daily estimate is available.">i</span></label>
         <div class="tabs" style="padding:3px;">
           <button class="tab-btn active" data-volmode="off" style="font-size:11.5px; padding:7px 8px;">Off</button>
           <button class="tab-btn" data-volmode="on" style="font-size:11.5px; padding:7px 8px;">On</button>
         </div>
       </div>
       <div class="field">
-        <label>Target Volatility <span class="info-icon" title="Baseline daily ATR-as-%-of-price that sizing is normalized against. Below this, size scales up (capped at 1.75×); above this, size scales down (floored at 0.25×).">i</span></label>
+        <label>Target Volatility <span class="info-icon" title="Target daily return standard deviation. Computed from complete UTC daily closes for every timeframe; the final exposure cap is 100%, including entry costs.">i</span></label>
         <div class="suffix-wrap"><span>%</span><input type="number" id="inVolTarget" value="4.0" min="0.5" max="20" step="0.1"></div>
       </div>
     </div>
     <div class="notes" style="margin-top:12px;">
-      <b>ATR Trailing Stop</b> — checked every bar, before the EMA signal is evaluated, so it can close a position ahead of a lagging cross. Recorded in the Trade Log with exit reason <span class="mono">ATR Stop</span>.<br>
-      <b>Vol-Targeted Sizing</b> — reduces new-entry size (and the size carried by that trade going forward) during high-volatility regimes, and modestly increases it during calm regimes, in an attempt to normalize risk per trade rather than risk per dollar.<br>
+      <b>ATR Trailing Stop</b> — checked at each close with a stop that never loosens; exits fill at the next available close. A zero close-move estimate does not create a zero-distance stop. Recorded in the Trade Log with exit reason <span class="mono">ATR Stop</span>.<br>
+      <b>Vol-Targeted Sizing</b> — reduces new-entry size (and the size carried by that trade going forward) during high-volatility regimes, and can increase it during calmer regimes while keeping the cash budget within 100%. It uses completed daily return volatility, with no future-day information.<br>
       <b>Caution</b> — both are mechanical overlays on top of the same limited BTC history as the rest of this backtest; validate out-of-sample before relying on either.
     </div>
   </div>
@@ -806,7 +819,7 @@ tr:hover td{background:var(--surface-2);}
         <tbody><tr class="mt-section"><td colspan="4">Timing &amp; Streaks</td></tr></tbody>
         <tbody id="grpTiming"></tbody>
 
-        <tbody><tr class="mt-section"><td colspan="4">MVRV Filter Impact <span class="info-icon" title="Same EMA cross rules, same date range — this run's result vs. an EMA-only baseline with the MVRV filter switched off. Isolates what the filter alone contributed.">i</span></td></tr></tbody>
+        <tbody><tr class="mt-section"><td colspan="4">MVRV Filter Impact <span class="info-icon" title="Same EMA cross rules, same date range — this run's result vs. the same strategy without MVRV with the MVRV filter switched off. Isolates what the filter alone contributed.">i</span></td></tr></tbody>
         <tbody id="grpFilterImpact"></tbody>
       </table>
     </div>
@@ -961,15 +974,17 @@ tr:hover td{background:var(--surface-2);}
   <div class="panel">
     <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--text-faint)"></span> METHODOLOGY</div></div>
     <div class="notes">
-      <b>Data</b> — daily BTC/USD closes, fetched live at page load from the linked dataset (updates daily; backtest re-runs automatically on new data). MVRV is fetched once from the same dataset repo and forward-filled onto whatever price grid (1h/4h/1d) is active.<br>
-      <b>Signal</b> — EMA(fast) crossing above EMA(slow) = buy signal ("golden cross"); crossing below = sell signal ("death cross"). EMAs are seeded with a simple moving average over the first N days, then computed recursively.<br>
-      <b>MVRV filter</b> — an optional valuation-regime overlay on top of the EMA cross, orthogonal to the price-derived trend signal. <i>Gate</i> blocks new entries once MVRV passes the Reduce threshold and force-exits positions at the Exit threshold, checked every bar (not only on cross days), so it can act ahead of a lagging EMA cross. <i>Scale</i> replaces the hard gate with a linear size taper between Reduce and Exit. Default thresholds (Long Reduce 2.0 / Exit 3.0, Short Reduce 1.2 / Exit 0.7) are read off the four completed BTC cycles in the linked MVRV summary — with only four cycles of history, treat these as a risk overlay to test out-of-sample, not an optimized parameter.<br>
-      <b>Execution</b> — trades fill at the closing price of the signal (or force-exit) bar — no next-bar delay, no slippage modeled beyond the fee input.<br>
-      <b>Sizing</b> — each entry commits Sizing% of equity at that moment, scaled further by the MVRV size multiplier when Scale mode is active; the remainder is held as uninvested cash earning 0%. Fees are charged on notional at both entry and exit.<br>
-      <b>Shorts</b> — modeled with linear (non-levered) payoff: position value moves inversely to price return. This is a simplification of real margin/funding mechanics.<br>
-      <b>Drawdown</b> — computed on the daily mark-to-market equity curve vs. its running all-time high. "True Drawdown" is the current distance from all-time high as of the last available day (0% if presently at a new high).<br>
-      <b>Filter Impact</b> — every recompute also runs an identical EMA-only backtest with the MVRV filter forced off, over the same date range, purely as a comparison baseline. It does not affect the trade log, chart, or headline metrics above it — those always reflect your current filter setting.<br>
-      <b>Disclaimer</b> — historical backtest performance is not indicative of future results. This tool is for research and education only and is not investment advice.
+      <b>Data</b> — validated BTC/USD close observations for the selected timeframe. Use Refresh to fetch again; the page does not stream prices. Timestamp labels are normalized to UTC. Gaps are flagged, not fabricated.<br>
+      <b>Signal and execution</b> — SMA-seeded EMA periods count observed bars. A completed-close signal fills at the next available close, with configurable adverse slippage and per-fill fees. Signals on the last bar remain unfilled. Backtests start in cash and wait for a new crossover.<br>
+      <b>MVRV</b> — observations retain their source timestamp and receive the configured calendar-day delay. Values older than the maximum age are unavailable. Gate blocks entries; Scale changes new-entry size only. Missing observations block new entries and queue an exit of an open position. Publication lag is an explicit research assumption.<br>
+      <b>Sizing</b> — all entry costs fit within the cash budget, capped at 100% after overlays. Uninvested cash earns 0%; the risk-free input is only a Sharpe benchmark. Volatility sizing uses sample standard deviation of 14 completed daily returns and waits for that estimate to become available.<br>
+      <b>Shorts</b> — fixed BTC quantity with linear USD P&amp;L. Optional annual carry is integrated on prior-bar notional. This is not an exchange margin/liquidation simulation. If sampled portfolio value cannot cover closure, the model records a capital-exhaustion exit and stops trading; a price gap can leave a deficit.<br>
+      <b>Stops</b> — the close-to-close Wilder proxy is not true OHLC ATR. The trailing stop only tightens, ignores a zero proxy, and queues a next-close exit. Intrabar stops cannot be reconstructed from close-only prices.<br>
+      <b>Returns</b> — portfolio P&amp;L includes both fees and all modeled costs. Calendar returns link to the previous period-end or initial capital; partial periods are marked. Mean Full-Year Return excludes partial years. CAGR uses exact elapsed time and requires 30 days, except a total loss is shown explicitly.<br>
+      <b>Risk statistics</b> — Sharpe uses sample SD (N−1) and the configured risk-free rate. Sortino uses all N returns in the downside denominator. Both use complete, consecutive UTC daily intervals and √365.25 scaling; partial/gapped daily returns are excluded. Square-root scaling does not correct serial dependence or establish significance.<br>
+      <b>Drawdown</b> — main drawdown uses every loaded bar and starts at initial capital. Rolling max drawdown retains the worst ordered peak-to-trough decline inside each window. Episode durations start at the prior peak; averages use recovered episodes. Ulcer Index uses available UTC day-end equity.<br>
+      <b>Filter impact</b> — the comparison disables only MVRV and retains all other settings, costs and dates. The buy-and-hold benchmark buys at the initial available close and remains open; neither open strategy positions nor buy-and-hold are charged a hypothetical final exit fee.<br>
+      <b>Validation</b> — historical parameter/start-date selection can overfit. These descriptive metrics do not establish a predictive edge. Test fixed rules on subsequent data and report uncertainty before relying on results.
     </div>
   </div>
   </div> <!-- /tabBacktest -->
@@ -1022,13 +1037,13 @@ tr:hover td{background:var(--surface-2);}
     <!-- ---- TREND EFFICIENCY (ADX-style) ---- -->
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span> TREND EFFICIENCY <span style="color:var(--text-faint); font-weight:600;">(ADX-style)</span></div>
+        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span> TREND EFFICIENCY <span style="color:var(--text-faint); font-weight:600;">(Kaufman ER)</span></div>
         <div class="chart-tools"><div class="legend-item" style="color:var(--text-faint); font-size:11px;">High = trending, low = choppy/ranging</div></div>
       </div>
       <div class="chart-box short"><canvas id="trendEffChart"></canvas></div>
       <div class="legend-row">
         <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span> Trend Efficiency (0–100)</div>
-        <div class="legend-item" style="color:var(--text-faint)">Dashed line at 25 — the usual "trending" threshold</div>
+        <div class="legend-item" style="color:var(--text-faint)">Dashed line at 25 — illustrative efficiency threshold, not an ADX cutoff</div>
         <div class="legend-item" style="color:var(--text-faint); margin-left:auto;">Note: uses Kaufman's Efficiency Ratio, not textbook ADX — see note above</div>
       </div>
     </div>
@@ -1092,6 +1107,7 @@ tr:hover td{background:var(--surface-2);}
     <div style="margin-top:26px; padding-top:16px; border-top:1px solid #1c232f; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#5b6472; letter-spacing:.3px;">
       <span>HISTORICAL BACKTEST · NOT INVESTMENT ADVICE</span>
       <span>data: 0xtrvkc/dynamic-btc-analytics-dashboard</span>
+      <span id="snapSettings" style="width:100%;line-height:1.6;overflow-wrap:anywhere;"></span>
     </div>
   </div>
 </div>
@@ -1122,13 +1138,14 @@ const HALVING_DATES = [
 ];
 let DATA_URL = TF_URLS['4h'];
 let RAW = { dates: [], prices: [], mvrv: [] };  // full parsed series, ascending by date
-let MVRV_BY_DATE = null; // Map<'YYYY-MM-DD', number> — fetched once, reused across timeframe switches
+let MVRV_RECORDS = null; // Sorted timestamped observations; refreshed explicitly and reused across timeframe switches
 let charts = { price:null, equity:null, rolling:null, mvrv:null, drawdown:null, pnlHist:null, durationScatter:null, rsi:null, macd:null, trendEff:null, atr:null, bb:null,
   ddEpisodeScatter:null, ddRecoveryBar:null, timeUnderwater:null, rollingDrawdown:null, rollingSharpe:null, realizedPnl:null };
 let ANALYSIS = null; // { rsi, macd:{macdLine,signalLine,hist}, trendEff, atr, bb:{mid,upper,lower} } — computed once per data load
 let lastEntrySpanDays = 0; // days between current Entry Date and the last available bar — used by updateRollWindowCap
 let state = {
   mode: 'buyonly',
+  startTimestamp: null,
   timeframe: '4h',
   priceRange: 'all',
   priceScale: 'linear',
@@ -1161,15 +1178,40 @@ const fmtSignedPct = (v, dp=2) => {
   return s+(v*100).toFixed(dp)+'%';
 };
 const fmtBTC = (v) => v==null||!isFinite(v) ? '—' : v.toLocaleString('en-US',{minimumFractionDigits:5,maximumFractionDigits:5})+' BTC';
-const parseTs = (d) => new Date(d.includes('T') ? d : d+'T00:00:00');
-const fmtDate = (d) => {
-  const dt = parseTs(d);
-  const opts = d.includes('T')
-    ? {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}
-    : {year:'numeric',month:'short',day:'2-digit'};
-  return dt.toLocaleDateString('en-US', opts).replace(',', '');
-};
-const daysBetween = (a,b) => Math.round((parseTs(b) - parseTs(a))/86400000);
+const ENGINE_VERSION = 'quant-2.0.0';
+const DAY_MS = 86400000;
+const YEAR_DAYS = 365.25;
+const POLICY = Object.freeze({ minCagrDays:30, minRiskReturns:10, minRollingReturns:20, volDays:14, mvrvLagDays:1, mvrvMaxAgeDays:3 });
+function parseTs(value){
+  const s = String(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);
+  if (!match) throw new Error('Invalid ISO timestamp: '+s);
+  const date = new Date(Date.UTC(+match[1], +match[2]-1, +match[3]));
+  if (date.getUTCFullYear()!==+match[1] || date.getUTCMonth()!==+match[2]-1 || date.getUTCDate()!==+match[3]) throw new Error('Invalid date: '+s);
+  const normalized = s.includes('T') ? (/(Z|[+-]\d{2}:?\d{2})$/.test(s) ? s : s+'Z') : s+'T00:00:00Z';
+  const dt = new Date(normalized);
+  if (!Number.isFinite(dt.getTime())) throw new Error('Invalid timestamp: '+s);
+  return dt;
+}
+const fmtDate = (d) => parseTs(d).toLocaleString('en-US', {timeZone:'UTC',year:'numeric',month:'short',day:'2-digit',...(String(d).includes('T')?{hour:'2-digit',minute:'2-digit',hour12:false}:{})}).replace(',', '') + (String(d).includes('T')?' UTC':'');
+const daysBetween = (a,b) => (parseTs(b)-parseTs(a))/DAY_MS;
+const fmtDays = v => Number.isFinite(v) ? (Math.abs(v)<1?v.toFixed(2):v.toFixed(1)).replace(/\.0$/,'') : '—';
+const intervalMs = tf => ({'1h':3600000,'4h':14400000,'1d':DAY_MS}[tf] || DAY_MS);
+function finiteMin(values, fallback=0){ let result=Infinity; for(const v of values) if(Number.isFinite(v) && v<result) result=v; return result===Infinity?fallback:result; }
+function finiteMax(values, fallback=0){ let result=-Infinity; for(const v of values) if(Number.isFinite(v) && v>result) result=v; return result===-Infinity?fallback:result; }
+function mean(values){ return values.length ? values.reduce((s,v)=>s+v,0)/values.length : null; }
+function sampleVariance(values){
+  let count=0,avg=0,m2=0;
+  for(const v of values){ if(!Number.isFinite(v)) continue; count++; const delta=v-avg; avg+=delta/count; m2+=delta*(v-avg); }
+  return count>1 ? Math.max(0,m2/(count-1)) : null;
+}
+function lowerBound(dates, target){
+  const t=typeof target==='number'?target:parseTs(target).getTime(); let lo=0,hi=dates.length;
+  while(lo<hi){const m=(lo+hi)>>>1; if(parseTs(dates[m]).getTime()<t)lo=m+1;else hi=m;}
+  return lo;
+}
+function tradeOutcome(trade){ const tolerance=Math.max(1e-8,Math.abs(trade.entryAmount||0)*1e-10); return trade.pnlDollar>tolerance?1:trade.pnlDollar < -tolerance?-1:0; }
+
 
 function themeVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
 
@@ -1244,14 +1286,14 @@ function computeRSI(prices, period=14){
     if (diff>=0) gainSum+=diff; else lossSum-=diff;
   }
   let avgGain = gainSum/period, avgLoss = lossSum/period;
-  rsi[period] = avgLoss===0 ? 100 : 100 - 100/(1+avgGain/avgLoss);
+  rsi[period] = avgLoss===0 ? (avgGain===0 ? 50 : 100) : 100 - 100/(1+avgGain/avgLoss);
   for (let i=period+1;i<prices.length;i++){
     const diff = prices[i]-prices[i-1];
     const gain = diff>0 ? diff : 0;
     const loss = diff<0 ? -diff : 0;
     avgGain = (avgGain*(period-1)+gain)/period;
     avgLoss = (avgLoss*(period-1)+loss)/period;
-    rsi[i] = avgLoss===0 ? 100 : 100 - 100/(1+avgGain/avgLoss);
+    rsi[i] = avgLoss===0 ? (avgGain===0 ? 50 : 100) : 100 - 100/(1+avgGain/avgLoss);
   }
   return rsi;
 }
@@ -1326,147 +1368,130 @@ function generateSignals(emaFast, emaSlow){
 }
 
 function buildTrade(entry, exit, exitAmt){
-  const pnlDollar = exitAmt - entry.amount;
-  const pnlPct = entry.amount > 0 ? (exitAmt/entry.amount)-1 : 0;
-  const holdDays = daysBetween(entry.date, exit.date);
+  const pnlDollar = exitAmt-entry.amount-(entry.carry||0);
+  const tolerance = Math.max(1e-8,entry.amount*1e-10);
+  const net = Math.abs(pnlDollar)<tolerance?0:pnlDollar;
   return {
-    side: entry.side, entryDate: entry.date, exitDate: exit.date,
-    entryPrice: entry.price, exitPrice: exit.price,
-    entryAmount: entry.amount, exitAmount: exitAmt,
-    pnlDollar, pnlPct, holdDays
+    side:entry.side,entryDate:entry.date,exitDate:exit.date,entryPrice:entry.price,exitPrice:exit.price,
+    quantity:entry.quantity,entryAmount:entry.amount,exitAmount:exitAmt,entryFee:entry.entryFee,exitFee:exit.fee,
+    carry:entry.carry||0,pnlDollar:net,pnlPct:entry.amount>0?net/entry.amount:null,holdDays:daysBetween(entry.date,exit.date),
+    signalDate:entry.signalDate,exitSignalDate:exit.signalDate
   };
 }
 
 function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
-  const n = dates.length;
-  const equity = new Array(n).fill(null);
-  const sigMap = new Map(signals.map(s=>[s.index, s.type]));
-  const mcfg = cfg.mvrv || { mode:'off' };
-  const acfg = cfg.atrStop || { enabled:false, mult:3 };
-  const vcfg = cfg.volSizing || { enabled:false, targetPct:0.04 };
-  const atr = (ANALYSIS && ANALYSIS.atr) || [];
-  let cash = cfg.initialCapital, invested = 0, position = null, entry = null;
-  let trailExtreme = null; // best close since entry, for the ATR trailing stop
-  const trades = [], markers = [];
-
-  function closePosition(i, reason){
-    const proceeds = invested; const fee = proceeds*cfg.feePct; const exitAmt = proceeds-fee;
-    cash += exitAmt;
-    const t = buildTrade(entry, {date:dates[i], price:prices[i]}, exitAmt);
-    t.exitReason = reason;
-    trades.push(t);
-    markers.push({index:i, action: position==='long' ? 'sell' : 'buy', reason});
-    invested = 0; position = null; entry = null; trailExtreme = null;
+  const n=dates.length, equity=new Array(n).fill(null), sigMap=new Map(signals.map(s=>[s.index,s.type]));
+  if(n!==prices.length || n!==mvrv.length || startIndex<0 || startIndex>=n) throw new Error('Invalid backtest data range.');
+  if(!Number.isFinite(cfg.initialCapital)||cfg.initialCapital<=0||!Number.isFinite(cfg.feePct)||cfg.feePct<0||cfg.feePct>.1||!Number.isFinite(cfg.sizingPct)||cfg.sizingPct<=0||cfg.sizingPct>1) throw new Error('Invalid capital, fees, or sizing.');
+  const mcfg=cfg.mvrv||{mode:'off'}, acfg=cfg.atrStop||{enabled:false,mult:3}, vcfg=cfg.volSizing||{enabled:false};
+  const atr=cfg.atrSeries||[], vol=cfg.volSeries||[], slip=cfg.slippagePct||0, carryRate=cfg.shortCarryRate||0;
+  let cash=cfg.initialCapital, entry=null, stopPrice=null, trailExtreme=null, pending=null, halted=false, totalFees=0,totalCarry=0;
+  const trades=[],markers=[];
+  const sleeveValue=(price)=>!entry?0:entry.side==='long'?entry.quantity*price:entry.notional+entry.quantity*(entry.price-price);
+  function closePosition(i,reason,decisionIndex=i){
+    if(!entry)return;
+    const side=entry.side, px=prices[i]*(side==='long'?1-slip:1+slip), fee=entry.quantity*px*cfg.feePct;
+    const exitAmt=sleeveValue(px)-fee;
+    const t=buildTrade(entry,{date:dates[i],price:px,fee,signalDate:dates[decisionIndex]},exitAmt);
+    t.exitReason=reason;trades.push(t);cash+=exitAmt;totalFees+=fee;
+    markers.push({index:i,action:side==='long'?'sell':'buy',reason,signalIndex:decisionIndex});
+    entry=null;stopPrice=null;trailExtreme=null;
   }
-
-  function tryOpen(i, side){
-    const mv = mvrv[i];
-    if (mvrvBlocksEntry(side, mv, mcfg)) return false; // gate mode / scale-taper-at-zero blocks a fresh entry
-    const mvMult = mvrvSizeMultiplier(side, mv, mcfg);
-    if (mvMult <= 0) return false;
-    const vMult = volSizeMultiplier(prices[i], atr[i], vcfg);
-    const base = cash+invested;
-    const amt = base*cfg.sizingPct*mvMult*vMult; const fee = amt*cfg.feePct;
-    invested = amt-fee; cash = base-amt; position = side;
-    entry = {index:i, date:dates[i], price:prices[i], amount:amt-fee, side};
-    trailExtreme = prices[i];
-    markers.push({index:i, action: side==='long' ? 'buy' : 'sell'});
-    return true;
+  function tryOpen(i,side,decisionIndex){
+    if(entry||halted||cash<=0)return;
+    const mv=mvrv[decisionIndex];
+    if(mvrvBlocksEntry(side,mv,mcfg))return;
+    const mvMult=mvrvSizeMultiplier(side,mv,mcfg), vMult=volSizeMultiplier(prices[decisionIndex],vol[decisionIndex],vcfg);
+    if(mvMult<=0||vMult<=0)return;
+    // Overlay multipliers change the cash budget; fees must fit inside it.
+    const fraction=Math.min(1,Math.max(0,cfg.sizingPct*mvMult*vMult));
+    const budget=cash*fraction, notional=budget/(1+cfg.feePct), fee=notional*cfg.feePct;
+    const px=prices[i]*(side==='long'?1+slip:1-slip);
+    if(!(notional>0&&px>0))return;
+    entry={index:i,date:dates[i],signalDate:dates[decisionIndex],price:px,amount:budget,notional,quantity:notional/px,entryFee:fee,carry:0,side};
+    cash-=budget;if(Math.abs(cash)<cfg.initialCapital*1e-12)cash=0;totalFees+=fee;
+    trailExtreme=prices[i];stopPrice=null;
+    markers.push({index:i,action:side==='long'?'buy':'sell',signalIndex:decisionIndex});
   }
-
-  // ATR trailing stop: ratchets with the best close seen since entry rather than
-  // a fixed level off the entry price, so it tightens automatically as a trade
-  // works in your favor instead of only protecting the original risk. Checked
-  // every bar, ahead of the EMA signal, so it can act before a lagging cross would.
-  function checkAtrStop(i){
-    if (!acfg.enabled || !position || atr[i] == null) return false;
-    if (position === 'long'){
-      trailExtreme = Math.max(trailExtreme, prices[i]);
-      const stopPrice = trailExtreme - acfg.mult*atr[i];
-      if (prices[i] <= stopPrice) return true;
-    } else {
-      trailExtreme = Math.min(trailExtreme, prices[i]);
-      const stopPrice = trailExtreme + acfg.mult*atr[i];
-      if (prices[i] >= stopPrice) return true;
+  for(let i=startIndex;i<n;i++){
+    if(!(Number.isFinite(prices[i])&&prices[i]>0))throw new Error('Invalid price in backtest.');
+    if(entry&&i>entry.index&&entry.side==='short'&&carryRate>0){
+      const cost=entry.quantity*prices[i-1]*carryRate*daysBetween(dates[i-1],dates[i])/YEAR_DAYS;
+      cash-=cost;entry.carry+=cost;totalCarry+=cost;
     }
-    return false;
-  }
-
-  for (let i=startIndex; i<n; i++){
-    if (i === startIndex){
-      cash = cfg.initialCapital; invested = 0; position = null; entry = null; trailExtreme = null;
-    } else {
-      if (position === 'long') invested = invested * (prices[i]/prices[i-1]);
-      else if (position === 'short') invested = Math.max(0, invested * (2 - prices[i]/prices[i-1]));
+    // Orders use only the previous observed close's information and fill now.
+    if(pending){
+      const order=pending;pending=null;
+      if(order.close&&entry)closePosition(i,order.reason,order.decisionIndex);
+      if(order.open)tryOpen(i,order.open,order.decisionIndex);
     }
-
-    // MVRV force-exit runs every bar and takes priority over the lagging EMA
-    // signal — this is what lets the filter sell/cover ahead of a death/golden
-    // cross when valuation is already in a historical blow-off or capitulation zone.
-    if (position && mvrvForcesExit(position, mvrv[i], mcfg)){
-      closePosition(i, 'mvrv');
+    let value=cash+sleeveValue(prices[i]);
+    if(entry&&value<=entry.quantity*prices[i]*cfg.feePct){
+      // Explicit sampled-close insolvency event, not an exchange liquidation simulation.
+      closePosition(i,'insolvent');halted=true;pending=null;value=cash;
     }
-
-    // ATR trailing stop — same "acts ahead of the lagging cross" priority as MVRV above.
-    if (position && checkAtrStop(i)){
-      closePosition(i, 'atrStop');
-    }
-
-    const sig = sigMap.get(i);
-    if (sig){
-      if (cfg.mode === 'buyonly'){
-        if (sig === 'buy' && position === null) tryOpen(i, 'long');
-        else if (sig === 'sell' && position === 'long') closePosition(i, 'signal');
-      } else if (cfg.mode === 'shortonly'){
-        if (sig === 'sell' && position === null) tryOpen(i, 'short');
-        else if (sig === 'buy' && position === 'short') closePosition(i, 'signal');
-      } else { // both
-        if (sig === 'buy'){
-          if (position === 'short') closePosition(i, 'signal');
-          if (position === null) tryOpen(i, 'long');
-        } else if (sig === 'sell'){
-          if (position === 'long') closePosition(i, 'signal');
-          if (position === null) tryOpen(i, 'short');
+    if(!entry&&value<=0)halted=true;
+    if(!Number.isFinite(value))throw new Error('Equity overflow: data or settings exceed numeric limits.');
+    equity[i]=value;
+    if(halted||i===n-1)continue;
+    let exitReason=null;
+    if(entry){
+      if(mcfg.mode!=='off'&&!Number.isFinite(mvrv[i]))exitReason='data';
+      else if(mvrvForcesExit(entry.side,mvrv[i],mcfg))exitReason='mvrv';
+      if(acfg.enabled&&Number.isFinite(atr[i])&&atr[i]>0){
+        if(entry.side==='long'){
+          trailExtreme=Math.max(trailExtreme,prices[i]);
+          const candidate=trailExtreme-acfg.mult*atr[i];stopPrice=stopPrice==null?candidate:Math.max(stopPrice,candidate);
+          if(prices[i]<=stopPrice&&!exitReason)exitReason='atrStop';
+        }else{
+          trailExtreme=Math.min(trailExtreme,prices[i]);
+          const candidate=trailExtreme+acfg.mult*atr[i];stopPrice=stopPrice==null?candidate:Math.min(stopPrice,candidate);
+          if(prices[i]>=stopPrice&&!exitReason)exitReason='atrStop';
         }
       }
     }
-    equity[i] = cash+invested;
+    if(exitReason){pending={close:true,reason:exitReason,decisionIndex:i};continue;}
+    const sig=sigMap.get(i);
+    if(!sig)continue;
+    const desired=sig==='buy'?'long':'short', allowed=cfg.mode==='both'||(cfg.mode==='buyonly'&&desired==='long')||(cfg.mode==='shortonly'&&desired==='short');
+    const close=!!entry&&entry.side!==desired;
+    const open=allowed&&(!entry||close)?desired:null;
+    if(close||open)pending={close,open,reason:'signal',decisionIndex:i};
   }
-  return { equity, trades, markers, openPosition: position ? {...entry, side:position} : null, finalPosition: position };
+  const openPosition=entry?{...entry,marketValue:sleeveValue(prices[n-1]),unrealizedPnl:sleeveValue(prices[n-1])-entry.amount-entry.carry,stopPrice}:null;
+  return {equity,trades,markers,openPosition,finalPosition:entry?entry.side:null,finalCash:cash,totalFees,totalCarry,halted,insolvent:equity[n-1]<=0};
 }
 
-function buyAndHoldEquity(dates, prices, cfg, startIndex){
-  const n = dates.length;
-  const eq = new Array(n).fill(null);
-  const fee = cfg.initialCapital*cfg.feePct;
-  const investedAmt0 = cfg.initialCapital - fee;
-  const units = investedAmt0/prices[startIndex];
-  for (let i=startIndex;i<n;i++) eq[i] = units*prices[i];
-  return { eq, units };
+function buyAndHoldEquity(dates,prices,cfg,startIndex){
+  const eq=new Array(dates.length).fill(null), px=prices[startIndex]*(1+(cfg.slippagePct||0));
+  const notional=cfg.initialCapital/(1+cfg.feePct), units=notional/px;
+  for(let i=startIndex;i<dates.length;i++)eq[i]=units*prices[i];
+  return {eq,units,entryFee:notional*cfg.feePct};
 }
 
-function computeDrawdown(equity, startIndex){
-  const dd = new Array(equity.length).fill(null);
-  let peak = -Infinity;
-  for (let i=startIndex;i<equity.length;i++){
-    if (equity[i] > peak) peak = equity[i];
-    dd[i] = peak>0 ? (equity[i]/peak - 1) : 0;
+function computeDrawdown(equity,startIndex,initialCapital=null){
+  const dd=new Array(equity.length).fill(null);
+  let peak=Number.isFinite(initialCapital)?initialCapital:-Infinity;
+  for(let i=startIndex;i<equity.length;i++){
+    if(!Number.isFinite(equity[i]))continue;
+    peak=Math.max(peak,equity[i]);dd[i]=peak>0?equity[i]/peak-1:0;
   }
   return dd;
 }
 
-function drawdownEpisodes(dd, startIndex){
-  const eps = []; let inEp=false, trough=0, tIdx=-1, sIdx=-1;
-  for (let i=startIndex;i<dd.length;i++){
-    if (dd[i] < -1e-9){
-      if (!inEp){ inEp=true; sIdx=i; trough=dd[i]; tIdx=i; }
-      else if (dd[i] < trough){ trough=dd[i]; tIdx=i; }
-    } else if (inEp){
-      eps.push({start:sIdx, trough:tIdx, end:i, val:trough});
-      inEp=false;
+function drawdownEpisodes(dd,startIndex){
+  const eps=[];let current=null,lastPeak=startIndex;
+  for(let i=startIndex;i<dd.length;i++){
+    if(!Number.isFinite(dd[i]))continue;
+    if(dd[i]<-1e-9){
+      if(!current)current={start:lastPeak,underwaterStart:i,trough:i,val:dd[i]};
+      else if(dd[i]<current.val){current.val=dd[i];current.trough=i;}
+    }else{
+      if(current){eps.push({...current,end:i,ongoing:false});current=null;}
+      lastPeak=i;
     }
   }
-  if (inEp) eps.push({start:sIdx, trough:tIdx, end:dd.length-1, val:trough, ongoing:true});
+  if(current)eps.push({...current,end:dd.length-1,ongoing:true});
   return eps;
 }
 
@@ -1547,123 +1572,108 @@ function updateRollWindowCap(spanDays){
 /* ======================================================================
    METRICS
 ====================================================================== */
-// Sharpe, Sortino, Calmar, and Ulcer Index — resampled to one value per
-// calendar day first (last bar of each day) so annualization stays correct
-// regardless of whether the backtest is running on 1h/4h/1d bars. Crypto
-// trades 365 days/year (not 252 like traditional markets), and risk-free
-// rate is treated as 0, the common simplification for crypto strategies.
-function computeRiskAdjustedMetrics(dates, equity, startIndex, cagr, maxDrawdown){
-  const empty = { sharpe:null, sortino:null, calmar:null, ulcerIndex:null };
-  const dayMap = new Map();
-  for (let i=startIndex;i<dates.length;i++){
-    if (equity[i]==null) continue;
-    dayMap.set(dates[i].slice(0,10), equity[i]);
+// A date-only observation is a daily close label. Intraday series must contain
+// every scheduled UTC bar to contribute a complete daily return. The last
+// close of a partial initial day may serve as the next full day's baseline.
+function dailySeries(dates,values,startIndex=0,initialCapital=null,timeframe='1d'){
+  const step=intervalMs(timeframe), expected=DAY_MS/step, groups=[];
+  for(let i=startIndex;i<dates.length;i++){
+    const ts=parseTs(dates[i]).getTime(), day=Math.floor(ts/DAY_MS)*DAY_MS;
+    let g=groups[groups.length-1];
+    if(!g||g.day!==day){g={day,key:new Date(day).toISOString().slice(0,10),count:0,first:ts,last:ts,end:null,regular:true};groups.push(g);}
+    if(g.count&&ts-g.last!==step)g.regular=false;
+    g.count++;g.last=ts;g.end=values[i];
   }
-  const dayKeys = Array.from(dayMap.keys()).sort();
-  const dayVals = dayKeys.map(k=>dayMap.get(k));
-  if (dayVals.length < 11) return empty;
-
-  const rets = [];
-  for (let i=1;i<dayVals.length;i++){
-    if (dayVals[i-1]>0) rets.push(dayVals[i]/dayVals[i-1] - 1);
+  const labels=[],timestamps=[],returns=[],equities=[],complete=[];
+  let prev=null;
+  for(const g of groups){
+    const hasEnd=g.last+step===g.day+DAY_MS;
+    const full=g.first===g.day&&g.count===expected&&hasEnd&&g.regular;
+    const base=prev&&prev.day+DAY_MS===g.day&&prev.hasEnd?prev.end:(!prev&&full?initialCapital:null);
+    const r=full&&Number.isFinite(g.end)&&Number.isFinite(base)&&base>0?g.end/base-1:null;
+    labels.push(g.key);timestamps.push(g.day+DAY_MS);returns.push(r);equities.push(hasEnd&&Number.isFinite(g.end)?g.end:null);complete.push(full);
+    prev={...g,hasEnd};
   }
-  if (rets.length < 10) return empty;
-
-  const mean = rets.reduce((a,b)=>a+b,0)/rets.length;
-  const variance = rets.reduce((a,r)=>a+(r-mean)**2,0)/rets.length;
-  const std = Math.sqrt(variance);
-  const annReturn = mean*365.25;
-  const annVol = std*Math.sqrt(365.25);
-  const sharpe = annVol>0 ? annReturn/annVol : null;
-
-  // Downside deviation uses the full sample size N in the denominator (the
-  // standard semi-deviation convention), not just the count of losing days.
-  const downsideSqSum = rets.reduce((a,r)=> a + (r<0 ? r*r : 0), 0);
-  const downsideDev = Math.sqrt(downsideSqSum/rets.length);
-  const annDownsideVol = downsideDev*Math.sqrt(365.25);
-  const sortino = annDownsideVol>0 ? annReturn/annDownsideVol : (annReturn>0 ? Infinity : null);
-
-  const calmar = (cagr!=null && maxDrawdown<0) ? cagr/Math.abs(maxDrawdown) : null;
-
-  let peak = dayVals[0], sqSum = 0;
-  for (let i=0;i<dayVals.length;i++){
-    peak = Math.max(peak, dayVals[i]);
-    const ddPct = peak>0 ? ((dayVals[i]-peak)/peak)*100 : 0;
-    sqSum += ddPct*ddPct;
-  }
-  const ulcerIndex = Math.sqrt(sqSum/dayVals.length);
-
-  return { sharpe, sortino, calmar, ulcerIndex };
+  return {labels,timestamps,returns,equities,complete};
 }
 
-function computeMetrics(dates, prices, startIndex, equity, trades, cfg, openPosition){
-  const n = dates.length;
-  const lastIdx = n-1;
-  const finalEquity = equity[lastIdx];
-  const years = Math.max(daysBetween(dates[startIndex], dates[lastIdx])/365.25, 1/365.25);
-
-  const cagr = (finalEquity>0 && cfg.initialCapital>0) ? Math.pow(finalEquity/cfg.initialCapital, 1/years)-1 : null;
-
-  // arithmetic annualized return: mean of calendar-year returns
-  const yearMap = new Map();
-  for (let i=startIndex;i<n;i++){
-    const y = dates[i].slice(0,4);
-    if (!yearMap.has(y)) yearMap.set(y, {first:equity[i], last:equity[i]});
-    else yearMap.get(y).last = equity[i];
+function computeDailyVolatility(dates,prices,timeframe,period=POLICY.volDays){
+  const daily=dailySeries(dates,prices,0,null,timeframe), estimates=[];
+  let window=[];
+  for(let i=0;i<daily.returns.length;i++){
+    const r=daily.returns[i];
+    if(!Number.isFinite(r)){window=[];estimates.push(null);continue;}
+    window.push(r);if(window.length>period)window.shift();
+    estimates.push(window.length===period?Math.sqrt(sampleVariance(window)):null);
   }
-  const yearReturns = [];
-  const yKeys = [...yearMap.keys()];
-  yKeys.forEach((y,idx)=>{
-    const rec = yearMap.get(y);
-    if (rec.first>0) yearReturns.push(rec.last/rec.first - 1);
-  });
-  const annualizedReturn = yearReturns.length ? yearReturns.reduce((a,b)=>a+b,0)/yearReturns.length : null;
-
-  const closed = trades;
-  const wins = closed.filter(t=>t.pnlPct>0);
-  const losses = closed.filter(t=>t.pnlPct<=0);
-  const grossProfit = wins.reduce((a,t)=>a+t.pnlDollar,0);
-  const grossLoss = Math.abs(losses.reduce((a,t)=>a+t.pnlDollar,0));
-  const profitFactor = grossLoss>0 ? grossProfit/grossLoss : (grossProfit>0?Infinity:null);
-  const winRate = closed.length ? wins.length/closed.length : null;
-  const tradesPerYear = closed.length / years;
-
-  const maxProfit = closed.length ? Math.max(...closed.map(t=>t.pnlPct)) : null;
-  const minProfitPositive = wins.length ? Math.min(...wins.map(t=>t.pnlPct)) : null;
-  const avgProfit = closed.length ? closed.reduce((a,t)=>a+t.pnlPct,0)/closed.length : null;
-
-  const dd = computeDrawdown(equity, startIndex);
-  const eps = drawdownEpisodes(dd, startIndex);
-  const maxDrawdown = Math.min(0, ...dd.slice(startIndex).filter(v=>v!=null));
-  const avgDrawdown = eps.length ? eps.reduce((a,e)=>a+e.val,0)/eps.length : 0;
-  const minDrawdown = eps.length ? Math.max(...eps.map(e=>e.val)) : 0;
-  const trueDrawdown = dd[lastIdx];
-
-  // streaks
-  let maxWinStreak=0, maxLossStreak=0, curW=0, curL=0;
-  closed.forEach(t=>{
-    if (t.pnlPct>0){ curW++; curL=0; } else { curL++; curW=0; }
-    maxWinStreak = Math.max(maxWinStreak,curW);
-    maxLossStreak = Math.max(maxLossStreak,curL);
-  });
-
-  const profitHold = wins.length ? wins.reduce((a,t)=>a+t.holdDays,0)/wins.length : null;
-  const lossHold = losses.length ? losses.reduce((a,t)=>a+t.holdDays,0)/losses.length : null;
-  const holdDaysArr = closed.map(t=>t.holdDays);
-  const holdRange = holdDaysArr.length ? [Math.min(...holdDaysArr), Math.max(...holdDaysArr)] : null;
-
-  const risk = computeRiskAdjustedMetrics(dates, equity, startIndex, cagr, maxDrawdown);
-
-  return {
-    years, cagr, annualizedReturn, finalEquity,
-    profitFactor, winRate, tradesPerYear, totalTrades: closed.length,
-    maxProfit, minProfitPositive, avgProfit,
-    maxDrawdown, avgDrawdown, minDrawdown, trueDrawdown,
-    maxWinStreak, maxLossStreak, profitHold, lossHold, holdRange,
-    dd, eps, grossProfit, grossLoss,
-    sharpe: risk.sharpe, sortino: risk.sortino, calmar: risk.calmar, ulcerIndex: risk.ulcerIndex
-  };
+  const out=new Array(dates.length).fill(null);let j=-1;
+  for(let i=0;i<dates.length;i++){
+    const ts=parseTs(dates[i]).getTime();
+    while(j+1<daily.timestamps.length&&daily.timestamps[j+1]<=ts)j++;
+    if(j>=0&&ts-daily.timestamps[j]<DAY_MS)out[i]=estimates[j];
+  }
+  return out;
 }
+
+function calendarReturns(dates,equity,startIndex,initialCapital,timeframe='1d',period='month'){
+  const records=[],step=intervalMs(timeframe);let prior=initialCapital;
+  for(let i=startIndex;i<dates.length;i++){
+    if(!Number.isFinite(equity[i]))continue;
+    const dt=parseTs(dates[i]),key=dt.toISOString().slice(0,period==='year'?4:7);
+    let rec=records[records.length-1];
+    if(!rec||rec.key!==key){
+      rec={key,opening:prior,closing:equity[i],first:dt.getTime(),last:dt.getTime()};records.push(rec);
+    }
+    rec.closing=equity[i];rec.last=dt.getTime();prior=equity[i];
+  }
+  for(const rec of records){
+    const year=Number(rec.key.slice(0,4)),month=period==='year'?0:Number(rec.key.slice(5,7))-1;
+    const begin=Date.UTC(year,month,1),end=period==='year'?Date.UTC(year+1,0,1):Date.UTC(year,month+1,1);
+    rec.partial=rec.first>begin||rec.last+step<end;
+    rec.value=rec.opening>0?rec.closing/rec.opening-1:null;
+  }
+  return records;
+}
+
+function computeRiskAdjustedMetrics(dates,equity,startIndex,cagr,maxDrawdown,cfg={}){
+  const daily=dailySeries(dates,equity,startIndex,cfg.initialCapital??equity[startIndex],cfg.timeframe||'1d');
+  const rets=daily.returns.filter(Number.isFinite), rf=Math.pow(1+(cfg.riskFreeRate||0),1/YEAR_DAYS)-1, target=Math.pow(1+(cfg.downsideTarget||0),1/YEAR_DAYS)-1;
+  let sharpe=null,sortino=null,ulcerIndex=null;
+  const ruined=equity.slice(startIndex).some(v=>Number.isFinite(v)&&v<=0);
+  if(rets.length>=POLICY.minRiskReturns&&!ruined){
+    const excess=rets.map(r=>r-rf), sd=Math.sqrt(sampleVariance(excess)), avg=mean(excess);
+    sharpe=sd>1e-15?avg/sd*Math.sqrt(YEAR_DAYS):null;
+    const below=rets.map(r=>r-target), downside=Math.sqrt(below.reduce((s,r)=>s+Math.min(0,r)**2,0)/below.length), numerator=mean(below);
+    sortino=downside>1e-15?numerator/downside*Math.sqrt(YEAR_DAYS):(numerator>0?Infinity:null);
+  }
+  let peak=cfg.initialCapital??equity[startIndex],sq=0,count=0;
+  for(const v of daily.equities){if(!Number.isFinite(v))continue;peak=Math.max(peak,v);if(peak>0){sq+=((v/peak-1)*100)**2;count++;}}
+  if(count)ulcerIndex=Math.sqrt(sq/count);
+  const calmar=Number.isFinite(cagr)&&maxDrawdown<0?cagr/Math.abs(maxDrawdown):null;
+  return {sharpe,sortino,calmar,ulcerIndex,dailyReturnCount:rets.length,excludedDays:daily.returns.length-rets.length};
+}
+
+function computeMetrics(dates,prices,startIndex,equity,trades,cfg,openPosition){
+  const lastIdx=dates.length-1,finalEquity=equity[lastIdx],days=daysBetween(dates[startIndex],dates[lastIdx]),years=days/YEAR_DAYS;
+  const cagr=finalEquity===0&&years>0?-1:finalEquity>0&&days>=POLICY.minCagrDays?Math.expm1(Math.log(finalEquity/cfg.initialCapital)/years):null;
+  const yearly=calendarReturns(dates,equity,startIndex,cfg.initialCapital,cfg.timeframe||'1d','year');
+  const fullYears=yearly.filter(y=>!y.partial&&Number.isFinite(y.value)),annualizedReturn=mean(fullYears.map(y=>y.value));
+  const wins=trades.filter(t=>tradeOutcome(t)===1),losses=trades.filter(t=>tradeOutcome(t)===-1),breakevens=trades.filter(t=>tradeOutcome(t)===0);
+  const grossProfit=wins.reduce((s,t)=>s+t.pnlDollar,0),grossLoss=-losses.reduce((s,t)=>s+t.pnlDollar,0);
+  const profitFactor=grossLoss>0?grossProfit/grossLoss:grossProfit>0?Infinity:null;
+  const dd=computeDrawdown(equity,startIndex,cfg.initialCapital),eps=drawdownEpisodes(dd,startIndex),closedEps=eps.filter(e=>!e.ongoing),maxDrawdown=finiteMin(dd,0);
+  let curW=0,curL=0,maxWinStreak=0,maxLossStreak=0;
+  for(const t of trades){const result=tradeOutcome(t);curW=result===1?curW+1:0;curL=result===-1?curL+1:0;maxWinStreak=Math.max(maxWinStreak,curW);maxLossStreak=Math.max(maxLossStreak,curL);}
+  const holds=trades.map(t=>t.holdDays),risk=computeRiskAdjustedMetrics(dates,equity,startIndex,cagr,maxDrawdown,cfg);
+  const realizedPnl=trades.reduce((s,t)=>s+t.pnlDollar,0),unrealizedPnl=openPosition?.unrealizedPnl||0;
+  return {years,cagr,annualizedReturn,completeYears:fullYears.length,finalEquity,profitFactor,winRate:trades.length?wins.length/trades.length:null,
+    tradesPerYear:years>0?trades.length/years:null,totalTrades:trades.length,breakevens:breakevens.length,
+    maxProfit:trades.length?finiteMax(trades.map(t=>t.pnlPct),null):null,minProfitPositive:wins.length?finiteMin(wins.map(t=>t.pnlPct),null):null,avgProfit:mean(trades.map(t=>t.pnlPct)),
+    maxDrawdown,avgDrawdown:closedEps.length?mean(closedEps.map(e=>e.val)):null,minDrawdown:closedEps.length?finiteMax(closedEps.map(e=>e.val),null):null,trueDrawdown:dd[lastIdx],
+    maxWinStreak,maxLossStreak,profitHold:mean(wins.map(t=>t.holdDays)),lossHold:mean(losses.map(t=>t.holdDays)),holdRange:holds.length?[finiteMin(holds),finiteMax(holds)]:null,
+    dd,eps,closedEpisodes:closedEps.length,grossProfit,grossLoss,realizedPnl,unrealizedPnl,...risk};
+}
+
 
 /* ======================================================================
    DRAWDOWN — EXTRA ANALYTICS (episode economics, time underwater,
@@ -1695,10 +1705,8 @@ function computeTimeUnderwater(dates, dd, startIndex){
   const lastIdx = dates.length-1;
   for (let i=startIndex;i<lastIdx;i++){
     if (dd[i]==null) continue;
-    // Accumulate raw milliseconds, not daysBetween() per step — daysBetween
-    // rounds to whole days, which silently zeroes out every increment on a
-    // sub-daily timeframe (e.g. 4h bars: each step is 0.167d -> rounds to 0,
-    // and thousands of zeros sum to zero). Round only once, at the end.
+    // Integrate elapsed milliseconds so sub-daily intervals retain their
+    // fractional duration; display formatting happens only at the end.
     const dtMs = parseTs(dates[i+1]).getTime() - parseTs(dates[i]).getTime();
     if (dd[i] < -1e-9) underwaterMs += dtMs; else atHighMs += dtMs;
   }
@@ -1708,65 +1716,46 @@ function computeTimeUnderwater(dates, dd, startIndex){
 }
 
 // Rolling *local* max drawdown: for each bar, the worst peak-to-trough decline
-// using only the peak equity within the trailing `windowDays` — unlike the
+// using only equity within the trailing `windowDays` — unlike the
 // underwater chart (which always measures from the all-time high), this
 // answers "how bad has risk been lately" independent of an old high that may
-// be far in the past. Classic sliding-window-maximum via monotonic deque;
-// the window boundary is real elapsed time (two-pointer), same pattern as
-// rollingReturn() above, so it's correct for any bar spacing.
-function computeRollingDrawdown(dates, equity, startIndex, windowDays){
-  const n = equity.length;
-  const out = new Array(n).fill(null);
-  const windowMs = windowDays*86400000;
-  const deque = []; // indices; equity[deque[0]] is the current window's max
-  for (let i=startIndex;i<n;i++){
-    if (equity[i]==null) continue;
-    while (deque.length && equity[deque[deque.length-1]] <= equity[i]) deque.pop();
-    deque.push(i);
-    const windowStart = parseTs(dates[i]).getTime() - windowMs;
-    while (deque.length && parseTs(dates[deque[0]]).getTime() < windowStart) deque.shift();
-    const peak = equity[deque[0]];
-    out[i] = peak>0 ? equity[i]/peak - 1 : 0;
+// be far in the past. The window boundary uses real elapsed time.
+// Exact ordered peak-to-trough drawdown in each trailing window. A two-stack
+// aggregate queue preserves chronology in amortized O(N) time and O(window)
+// space. It does not retain an expired peak or forget a recovered trough.
+function computeRollingDrawdown(dates,equity,startIndex,windowDays,initialCapital=null){
+  const out=new Array(equity.length).fill(null),front=[],back=[];
+  function merge(a,b){if(!a)return b;if(!b)return a;return {max:Math.max(a.max,b.max),min:Math.min(a.min,b.min),dd:Math.min(a.dd,b.dd,a.max>0?b.min/a.max-1:0)};}
+  function push(ts,value){const item={ts,value,agg:{max:value,min:value,dd:0}};item.agg=merge(back.length?back[back.length-1].agg:null,item.agg);back.push(item);}
+  function refill(){if(front.length)return;while(back.length){const x=back.pop();x.agg=merge({max:x.value,min:x.value,dd:0},front.length?front[front.length-1].agg:null);front.push(x);}}
+  if(Number.isFinite(initialCapital))push(parseTs(dates[startIndex]).getTime(),initialCapital);
+  for(let i=startIndex;i<equity.length;i++){
+    if(!Number.isFinite(equity[i]))continue;
+    const ts=parseTs(dates[i]).getTime(),cutoff=ts-windowDays*DAY_MS;
+    push(ts,equity[i]);refill();
+    while(front.length&&front[front.length-1].ts<cutoff){front.pop();refill();}
+    const aggregate=merge(front.length?front[front.length-1].agg:null,back.length?back[back.length-1].agg:null);
+    out[i]=aggregate.max>0?aggregate.dd:null;
   }
   return out;
 }
 
-// Rolling Sharpe over a trailing calendar window, using the same daily
-// resampling + annualization convention (mean*365.25 / (std*sqrt(365.25)))
-// as computeRiskAdjustedMetrics() above, so this rolling line is directly
-// comparable to the single full-period Sharpe metric card. Requires at
-// least `minObs` daily return observations in the window, else null (gap
-// in the line) — avoids a handful of days producing a noisy annualized spike.
-function computeRollingSharpe(dates, equity, startIndex, windowDays, minObs=20){
-  const dayMap = new Map();
-  for (let i=startIndex;i<dates.length;i++){
-    if (equity[i]==null) continue;
-    dayMap.set(dates[i].slice(0,10), equity[i]);
-  }
-  const dayKeys = Array.from(dayMap.keys()).sort();
-  const dayVals = dayKeys.map(k=>dayMap.get(k));
-  const rets = [], retTs = [];
-  for (let i=1;i<dayVals.length;i++){
-    if (dayVals[i-1]>0){ rets.push(dayVals[i]/dayVals[i-1]-1); retTs.push(parseTs(dayKeys[i]).getTime()); }
-  }
-  const windowMs = windowDays*86400000;
-  const out = new Array(rets.length).fill(null);
-  let j=0, sum=0, sumSq=0;
-  for (let i=0;i<rets.length;i++){
-    sum += rets[i]; sumSq += rets[i]*rets[i];
-    const windowStart = retTs[i]-windowMs;
-    while (j<i && retTs[j] < windowStart){ sum -= rets[j]; sumSq -= rets[j]*rets[j]; j++; }
-    const count = i-j+1;
-    if (count >= minObs){
-      const mean = sum/count;
-      const variance = Math.max(0, sumSq/count - mean*mean);
-      const std = Math.sqrt(variance);
-      const annReturn = mean*365.25, annVol = std*Math.sqrt(365.25);
-      out[i] = annVol>0 ? annReturn/annVol : null;
+function computeRollingSharpe(dates,equity,startIndex,windowDays,minObs=POLICY.minRollingReturns,cfg={}){
+  const daily=dailySeries(dates,equity,startIndex,cfg.initialCapital??equity[startIndex],cfg.timeframe||'1d');
+  const rf=Math.pow(1+(cfg.riskFreeRate||0),1/YEAR_DAYS)-1,values=new Array(daily.labels.length).fill(null);
+  let j=0,count=0,sum=0,sumSq=0;
+  for(let i=0;i<daily.returns.length;i++){
+    const v=daily.returns[i];if(Number.isFinite(v)){const x=v-rf;count++;sum+=x;sumSq+=x*x;}
+    const cutoff=daily.timestamps[i]-windowDays*DAY_MS;
+    while(j<=i&&daily.timestamps[j]<=cutoff){const r=daily.returns[j];if(Number.isFinite(r)){const x=r-rf;count--;sum-=x;sumSq-=x*x;}j++;}
+    if(count>=minObs&&daily.equities[i]>0&&Number.isFinite(v)){
+      const variance=Math.max(0,(sumSq-sum*sum/count)/(count-1));
+      if(variance>1e-30)values[i]=(sum/count)/Math.sqrt(variance)*Math.sqrt(YEAR_DAYS);
     }
   }
-  return { labels: dayKeys.slice(1), values: out };
+  return {labels:daily.labels,values};
 }
+
 
 // Cumulative realized P&L, split into winning-trade and losing-trade
 // contributions. This is *realized* P&L from closed trades only — by
@@ -1803,120 +1792,138 @@ function computeMonthlyUnderwaterHeatmap(dates, dd, startIndex){
 /* ======================================================================
    FETCH + INIT
 ====================================================================== */
-async function loadMvrvOnce(){
-  if (MVRV_BY_DATE) return MVRV_BY_DATE;
-  MVRV_BY_DATE = new Map();
-  try{
-    const res = await fetch(MVRV_URL, {cache:'no-store'});
-    if (!res.ok) throw new Error('mvrv fetch failed: '+res.status);
-    const json = await res.json();
-    const arr = json.mvrv || [];
-    // Series is ~daily but timestamped with jitter; keyed by UTC calendar date,
-    // last value wins if a date somehow appears twice.
-    arr.forEach(pt=>{
-      const d = new Date(pt.x).toISOString().slice(0,10);
-      MVRV_BY_DATE.set(d, pt.y);
-    });
-  }catch(e){
-    console.error('MVRV load failed, filter will be a no-op:', e);
-  }
-  return MVRV_BY_DATE;
+let MVRV_REQUEST=null, MVRV_META=null, MVRV_ERROR=null, DATA_CONTROLLER=null, DATA_REQUEST_ID=0, DATA_PENDING=false;
+let DATA_META=null;
+async function contentHash(text){
+  if(globalThis.crypto?.subtle){const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return 'sha256:'+Array.from(new Uint8Array(hash),v=>v.toString(16).padStart(2,'0')).join('');}
+  let h=2166136261;for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619);return 'fnv1a32:'+(h>>>0).toString(16).padStart(8,'0');
 }
-
-function alignMvrv(dates, byDate){
-  // Forward-filled lookup onto the price series' date grid (handles 1h/4h bars
-  // sharing a calendar date, and weekends/gaps in the MVRV source).
-  const out = new Array(dates.length).fill(null);
-  let last = null;
-  for (let i=0;i<dates.length;i++){
-    const key = dates[i].slice(0,10);
-    if (byDate.has(key)) last = byDate.get(key);
-    out[i] = last;
+async function fetchJson(url,signal){
+  const res=await fetch(url,{cache:'no-store',...(signal?{signal}:{})});
+  if(!res.ok)throw new Error('Request failed ('+res.status+').');
+  const text=await res.text();let json;
+  try{json=JSON.parse(text);}catch(e){throw new Error('The data source returned invalid JSON.');}
+  return {json,hash:await contentHash(text),fetchedAt:new Date().toISOString(),url};
+}
+function normalizePrices(json,timeframe){
+  if(!json||typeof json!=='object'||Array.isArray(json))throw new Error('Expected a timestamp-to-price object.');
+  const entries=Object.entries(json).map(([date,value])=>{
+    if(!((typeof value==='number')||(typeof value==='string'&&value.trim()!=='')))throw new Error('Missing price at '+date+'.');
+    const price=Number(value),ts=parseTs(date).getTime();
+    if(!Number.isFinite(price)||price<=0)throw new Error('Price must be finite and positive at '+date+'.');
+    const label=String(date).includes('T')?new Date(ts).toISOString():new Date(ts).toISOString().slice(0,10);
+    return {date:label,ts,price};
+  }).sort((a,b)=>a.ts-b.ts);
+  if(entries.length<2)throw new Error('At least two price observations are required.');
+  const step=intervalMs(timeframe);let missingBars=0;
+  for(let i=0;i<entries.length;i++){
+    if(entries[i].ts%step!==0)throw new Error('Price timestamps do not match the selected UTC bar grid.');
+    if(i){const delta=entries[i].ts-entries[i-1].ts;if(delta<=0)throw new Error('Duplicate price timestamps.');missingBars+=Math.max(0,delta/step-1);}
+  }
+  return {dates:entries.map(e=>e.date),prices:entries.map(e=>e.price),missingBars};
+}
+function normalizeMvrv(json){
+  const arr=json?.mvrv;if(!Array.isArray(arr)||!arr.length)throw new Error('MVRV series is empty or invalid.');
+  const seen=new Map();
+  for(const pt of arr){
+    const ts=typeof pt.x==='number'?pt.x:parseTs(pt.x).getTime();
+    if(!Number.isFinite(ts)||ts<1e11||ts>Date.UTC(2200,0,1))throw new Error('MVRV timestamps must be milliseconds or ISO dates.');
+    if(!((typeof pt.y==='number')||(typeof pt.y==='string'&&pt.y.trim()!=='')))throw new Error('Missing MVRV value.');
+    const value=Number(pt.y);if(!Number.isFinite(value)||value<=0)throw new Error('MVRV must be finite and positive.');
+    if(seen.has(ts)&&seen.get(ts)!==value)throw new Error('Conflicting MVRV observations at the same timestamp.');
+    seen.set(ts,value);
+  }
+  return Array.from(seen,([observedAt,value])=>({observedAt,value})).sort((a,b)=>a.observedAt-b.observedAt);
+}
+async function loadMvrvOnce(force=false){
+  if(MVRV_REQUEST)return MVRV_REQUEST;
+  if(MVRV_RECORDS&&!force)return MVRV_RECORDS;
+  MVRV_REQUEST=(async()=>{
+    try{
+      const result=await fetchJson(MVRV_URL);const records=normalizeMvrv(result.json);
+      MVRV_RECORDS=records;MVRV_META={hash:result.hash,fetchedAt:result.fetchedAt,url:MVRV_URL};MVRV_ERROR=null;return records;
+    }catch(error){MVRV_ERROR=error.message;MVRV_RECORDS=null;MVRV_META=null;throw error;}
+    finally{MVRV_REQUEST=null;}
+  })();
+  return MVRV_REQUEST;
+}
+function alignMvrv(dates,records,lagDays=POLICY.mvrvLagDays,maxAgeDays=POLICY.mvrvMaxAgeDays){
+  const out=new Array(dates.length).fill(null);if(!Array.isArray(records)||!records.length)return out;
+  let j=-1;
+  const availableAt=rec=>Math.max(rec.observedAt,Math.floor(rec.observedAt/DAY_MS)*DAY_MS+lagDays*DAY_MS);
+  for(let i=0;i<dates.length;i++){
+    const ts=parseTs(dates[i]).getTime();
+    while(j+1<records.length&&availableAt(records[j+1])<=ts)j++;
+    if(j>=0&&ts-records[j].observedAt<=maxAgeDays*DAY_MS)out[i]=records[j].value;
   }
   return out;
 }
-
-async function loadData(){
-  const res = await fetch(DATA_URL, {cache:'no-store'});
-  if (!res.ok) throw new Error('fetch failed: '+res.status);
-  const json = await res.json();
-  const dates = Object.keys(json).sort();
-  const prices = dates.map(d=>Number(json[d]));
-  const byDate = await loadMvrvOnce();
-  const mvrv = alignMvrv(dates, byDate);
-  RAW = { dates, prices, mvrv };
-  computeAnalysisIndicators();
+async function loadData(timeframe=state.timeframe,forceMvrv=false){
+  if(!TF_URLS[timeframe])throw new Error('Unknown timeframe.');
+  const token=++DATA_REQUEST_ID;DATA_CONTROLLER?.abort();const controller=new AbortController();DATA_CONTROLLER=controller;DATA_PENDING=true;
+  $('exportSnapBtn').disabled=true;
+  try{
+    const [pricePayload,mvrvResult]=await Promise.all([fetchJson(TF_URLS[timeframe],controller.signal),loadMvrvOnce(forceMvrv).catch(()=>null)]);
+    const price=normalizePrices(pricePayload.json,timeframe);
+    if(token!==DATA_REQUEST_ID)return false;
+    RAW={dates:price.dates,prices:price.prices,mvrv:alignMvrv(price.dates,mvrvResult)};
+    state.timeframe=timeframe;DATA_URL=TF_URLS[timeframe];
+    DATA_META={timeframe,url:DATA_URL,hash:pricePayload.hash,fetchedAt:pricePayload.fetchedAt,missingBars:price.missingBars};
+    computeAnalysisIndicators();
+    return true;
+  }catch(error){if(token!==DATA_REQUEST_ID||error.name==='AbortError')return false;throw error;}
+  finally{if(token===DATA_REQUEST_ID){DATA_PENDING=false;DATA_CONTROLLER=null;}}
 }
-
+function inputNumber(id,label,min,max,integer=false){
+  const input=$(id),value=input?Number(input.value):NaN;
+  if(!input||input.value.trim()===''||!Number.isFinite(value)||value<min||value>max||(integer&&!Number.isInteger(value)))throw new Error(label+' must be '+(integer?'a whole number ':'')+'between '+min+' and '+max+'.');
+  return value;
+}
 function readConfig(){
-  return {
-    mode: state.mode,
-    initialCapital: Math.max(1, Number($('inCapital').value)||10000),
-    feePct: Math.max(0, Number($('inFee').value)||0)/100,
-    sizingPct: Math.min(1, Math.max(0.01, Number($('inSizing').value)||100)/100),
-    emaFast: Math.max(2, Math.round(Number($('inEmaFast').value)||50)),
-    emaSlow: Math.max(3, Math.round(Number($('inEmaSlow').value)||200)),
-    startDate: $('inStartDate').value || RAW.dates[0],
-    mvrv: {
-      mode: state.mvrvMode, // 'off' | 'gate' | 'scale'
-      longReduce: Math.max(0, Number($('inMvrvLongReduce').value)||2.0),
-      longExit: Math.max(0, Number($('inMvrvLongExit').value)||3.0),
-      shortReduce: Math.max(0, Number($('inMvrvShortReduce').value)||1.2),
-      shortExit: Math.max(0, Number($('inMvrvShortExit').value)||0.7)
-    },
-    atrStop: {
-      enabled: state.atrStopMode === 'on',
-      mult: Math.min(10, Math.max(0.5, Number($('inAtrMult').value)||3.0))
-    },
-    volSizing: {
-      enabled: state.volSizingMode === 'on',
-      targetPct: Math.min(20, Math.max(0.5, Number($('inVolTarget').value)||4.0))/100
-    }
+  const cfg={
+    mode:state.mode,timeframe:state.timeframe,initialCapital:inputNumber('inCapital','Initial capital',1,1e12),
+    feePct:inputNumber('inFee','Fee per fill (%)',0,10)/100,sizingPct:inputNumber('inSizing','Sizing (%)',1,100)/100,
+    slippagePct:inputNumber('inSlippage','Slippage per fill (%)',0,5)/100,shortCarryRate:inputNumber('inShortCarry','Short carry per year (%)',0,100)/100,
+    riskFreeRate:inputNumber('inRiskFree','Risk-free rate (%)',-99,100)/100,downsideTarget:inputNumber('inDownsideTarget','Sortino target (%)',-99,100)/100,
+    emaFast:inputNumber('inEmaFast','Fast EMA bars',2,300,true),emaSlow:inputNumber('inEmaSlow','Slow EMA bars',3,500,true),
+    startDate:state.startTimestamp&&$('inStartDate').value===state.startTimestamp.slice(0,10)?state.startTimestamp:$('inStartDate').value,
+    mvrv:{mode:state.mvrvMode,longReduce:inputNumber('inMvrvLongReduce','Long reduce',0,10),longExit:inputNumber('inMvrvLongExit','Long exit',0,10),
+      shortReduce:inputNumber('inMvrvShortReduce','Short reduce',0,10),shortExit:inputNumber('inMvrvShortExit','Short exit',0,10),
+      lagDays:inputNumber('inMvrvLag','MVRV calendar-day lag',1,30,true),maxAgeDays:inputNumber('inMvrvAge','MVRV maximum age (days)',1,60,true)},
+    atrStop:{enabled:state.atrStopMode==='on',mult:inputNumber('inAtrMult','ATR stop multiplier',.5,10)},
+    volSizing:{enabled:state.volSizingMode==='on',targetPct:inputNumber('inVolTarget','Target daily volatility (%)',.5,20)/100},
+    atrSeries:ANALYSIS?.atr||[],volSeries:ANALYSIS?.dailyVol||[]
   };
+  if(!cfg.startDate)throw new Error('Choose a backtest start date.');parseTs(cfg.startDate);
+  if(cfg.emaFast>=cfg.emaSlow)throw new Error('Fast EMA must be shorter than slow EMA.');
+  if(cfg.mvrv.longReduce>=cfg.mvrv.longExit||cfg.mvrv.shortExit>=cfg.mvrv.shortReduce)throw new Error('Use Long Reduce < Long Exit and Short Exit < Short Reduce.');
+  if(cfg.mvrv.maxAgeDays<cfg.mvrv.lagDays)throw new Error('MVRV maximum age must be at least the calendar-day lag.');
+  return cfg;
 }
-
-// Vol-targeted size multiplier: Target Volatility ÷ current Close-ATR(14)-as-%-of-price,
-// clamped to 0.25x-1.75x so a near-zero ATR reading (illiquid stretch of history) can't
-// blow the multiplier up unboundedly, and a volatility spike can't zero the size out.
-function volSizeMultiplier(price, atrVal, vcfg){
-  if (!vcfg.enabled || atrVal == null || price <= 0) return 1;
-  const curPct = atrVal/price;
-  if (curPct <= 0) return 1;
-  const raw = vcfg.targetPct/curPct;
-  return Math.min(1.75, Math.max(0.25, raw));
+// Daily sample volatility, available only after completed daily observations.
+function volSizeMultiplier(price,volatility,vcfg){
+  if(!vcfg.enabled)return 1;
+  if(!Number.isFinite(volatility)||volatility<0)return 0;
+  return volatility===0?1.75:Math.min(1.75,Math.max(.25,vcfg.targetPct/volatility));
 }
-
-// Returns a 0..1 size multiplier for opening/holding a position at the given
-// MVRV reading. 'gate' is binary (1 or 0, i.e. blocked/force-exited elsewhere);
-// 'scale' linearly tapers between the reduce and exit thresholds.
-function mvrvSizeMultiplier(side, mvrvVal, mcfg){
-  if (mcfg.mode === 'off' || mvrvVal == null) return 1;
-  if (side === 'long'){
-    if (mvrvVal >= mcfg.longExit) return 0;
-    if (mvrvVal <= mcfg.longReduce) return 1;
-    if (mcfg.mode === 'gate') return 1; // gate only blocks brand-new entries, see runBacktest
-    const span = mcfg.longExit - mcfg.longReduce;
-    return span>0 ? 1 - (mvrvVal-mcfg.longReduce)/span : 1;
-  } else { // short
-    if (mvrvVal <= mcfg.shortExit) return 0;
-    if (mvrvVal >= mcfg.shortReduce) return 1;
-    if (mcfg.mode === 'gate') return 1;
-    const span = mcfg.shortReduce - mcfg.shortExit;
-    return span>0 ? 1 - (mcfg.shortReduce-mvrvVal)/span : 1;
+function mvrvSizeMultiplier(side,value,mcfg){
+  if(mcfg.mode==='off')return 1;if(!Number.isFinite(value))return 0;
+  if(side==='long'){
+    if(value>=mcfg.longExit)return 0;if(value<=mcfg.longReduce)return 1;
+    return mcfg.mode==='scale'?(mcfg.longExit-value)/(mcfg.longExit-mcfg.longReduce):1;
   }
+  if(value<=mcfg.shortExit)return 0;if(value>=mcfg.shortReduce)return 1;
+  return mcfg.mode==='scale'?(value-mcfg.shortExit)/(mcfg.shortReduce-mcfg.shortExit):1;
+}
+function mvrvBlocksEntry(side,value,mcfg){
+  if(mcfg.mode==='off')return false;if(!Number.isFinite(value))return true;
+  return side==='long'?value>=(mcfg.mode==='gate'?mcfg.longReduce:mcfg.longExit):value<=(mcfg.mode==='gate'?mcfg.shortReduce:mcfg.shortExit);
+}
+function mvrvForcesExit(side,value,mcfg){
+  if(mcfg.mode==='off')return false;if(!Number.isFinite(value))return true;
+  return side==='long'?value>=mcfg.longExit:value<=mcfg.shortExit;
 }
 
-function mvrvBlocksEntry(side, mvrvVal, mcfg){
-  if (mcfg.mode === 'off' || mvrvVal == null) return false;
-  if (side === 'long')  return mvrvVal >= (mcfg.mode==='gate' ? mcfg.longReduce : mcfg.longExit);
-  return mvrvVal <= (mcfg.mode==='gate' ? mcfg.shortReduce : mcfg.shortExit);
-}
-
-function mvrvForcesExit(side, mvrvVal, mcfg){
-  if (mcfg.mode === 'off' || mvrvVal == null) return false;
-  if (side === 'long')  return mvrvVal >= mcfg.longExit;
-  return mvrvVal <= mcfg.shortExit;
-}
 
 function renderCycleDividers(){
   const overlay = $('halvingOverlay');
@@ -1960,7 +1967,7 @@ function livePreview(idx){
   const changeEl = $('entryChange');
   changeEl.textContent = fmtSignedPct(changePct);
   changeEl.className = 'ticker-val num ' + (changePct>=0 ? 'green' : 'red');
-  $('entryDaysHeld').textContent = days.toLocaleString('en-US');
+  $('entryDaysHeld').textContent = fmtDays(days);
   const ef = lastResult.emaFast[idx], es = lastResult.emaSlow[idx];
   const stateEl = $('entryEmaState');
   if (ef==null || es==null){ stateEl.textContent = 'WARMING UP'; stateEl.style.color = 'var(--text-faint)'; }
@@ -1996,66 +2003,75 @@ function scheduleRecompute(){
   requestAnimationFrame(()=>{ rafPending = false; recompute(); });
 }
 
-function recompute(){
-  if (!RAW.dates.length) return;
-  const cfg = readConfig();
-  if (cfg.emaFast >= cfg.emaSlow){
-    // guard: force fast < slow visually but don't hard block; just warn softly via console
-  }
-  const emaFast = computeEMA(RAW.prices, cfg.emaFast);
-  const emaSlow = computeEMA(RAW.prices, cfg.emaSlow);
-  const signals = generateSignals(emaFast, emaSlow);
-
-  let startIndex = emaSlow.findIndex(v=>v!=null);
-  if (startIndex < 0) startIndex = 0;
-  const userStartIdx = RAW.dates.findIndex(d=>d >= cfg.startDate);
-  if (userStartIdx > startIndex) startIndex = userStartIdx;
-  if (startIndex >= RAW.dates.length-2) startIndex = Math.max(0, RAW.dates.length-3);
-
-  const bt = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, cfg, startIndex);
-  const bh = buyAndHoldEquity(RAW.dates, RAW.prices, cfg, startIndex);
-  const metrics = computeMetrics(RAW.dates, RAW.prices, startIndex, bt.equity, bt.trades, cfg, bt.openPosition);
-  const metricsHold = computeMetrics(RAW.dates, RAW.prices, startIndex, bh.eq, [], cfg, null);
-
-  // Baseline for the "MVRV Filter Impact" comparison: identical EMA rules,
-  // identical date range, filter switched off. Isolates what the filter alone changed.
-  const baseCfg = { ...cfg, mvrv: { ...cfg.mvrv, mode:'off' } };
-  const btBase = runBacktest(RAW.dates, RAW.prices, RAW.mvrv, signals, baseCfg, startIndex);
-  const metricsBase = computeMetrics(RAW.dates, RAW.prices, startIndex, btBase.equity, btBase.trades, baseCfg, btBase.openPosition);
-
-  const rollWindowDays = state.rollWindowYears*365.25;
-  const rollStrat = rollingReturn(RAW.dates, bt.equity, startIndex, rollWindowDays);
-  const rollHold = rollingReturn(RAW.dates, bh.eq, startIndex, rollWindowDays);
-
-  lastResult = { cfg, emaFast, emaSlow, signals, startIndex, bt, bh, metrics, metricsHold, rollStrat, rollHold, btBase, metricsBase };
-
-  renderTicker();
-  renderPriceChart();
-  renderEquityChart();
-  renderDrawdownChart();
-  renderDrawdownEpisodesCharts();
-  renderTimeUnderwaterPanel();
-  renderRollingRiskCharts();
-  renderRealizedPnlChart();
-  renderUnderwaterHeatmap();
-  renderRollingChart();
-  renderMvrvChart();
-  renderMetrics();
-  renderMonthlyHeatmap();
-  renderPnlHistogram();
-  renderDurationScatter();
-  renderFilterImpact();
-  renderHoldVsTrade();
-  if (!sliderDragging) renderTradeLog();
-  updateEntryReadout();
-  $('inStartSlider').value = startIndex;
-  $('statusLine').innerHTML = '<span style="color:var(--green)">●</span> live · '+RAW.dates.length+' '+(TF_LABELS[state.timeframe]||'DAILY').toLowerCase()+' bars';
+function showRunIssue(message){
+  lastResult=null;$('exportSnapBtn').disabled=true;$('statusLine').textContent='Results unavailable';
+  const notice=$('runNotice');notice.textContent=message;notice.style.color='var(--red)';
+  for(const key of Object.keys(charts)){if(charts[key]){charts[key].destroy();charts[key]=null;}}
+  for(const id of ['grpReturn','grpTrades','grpDrawdown','grpRisk','grpTiming','grpFilterImpact'])$(id).innerHTML='<tr><td colspan="4">Correct the settings or refresh the data to calculate results.</td></tr>';
+  for(const id of ['heatmapWrap','ddHeatmapWrap','heatmapLegend','ddHeatmapLegend','tradeLogBody'])$(id).textContent='';
+  for(const id of ['hvtStratWorth','hvtHoldWorth','hvtBtcThen','hvtBtcNow','hvtBtcGain','hvtStratSub','hvtHoldSub','hvtBtcThenSub','tuCenterPct','tuUnderwaterDays','tuAtHighDays','tuLongestEp','tuCurrentEp','ddPeakBadge']){if($(id))$(id).textContent='—';}
 }
+function computeRun(cfg){
+  const emaFast=computeEMA(RAW.prices,cfg.emaFast),emaSlow=computeEMA(RAW.prices,cfg.emaSlow);
+  const warmup=Math.max(cfg.emaFast,cfg.emaSlow)-1;
+  if(warmup>=RAW.dates.length)throw new Error('Not enough bars to initialize both EMAs.');
+  const userStartIdx=lowerBound(RAW.dates,cfg.startDate);
+  if(userStartIdx>=RAW.dates.length)throw new Error('Start date is after the final available bar.');
+  const startIndex=Math.max(warmup,userStartIdx),signals=generateSignals(emaFast,emaSlow);
+  RAW.mvrv=alignMvrv(RAW.dates,MVRV_RECORDS,cfg.mvrv.lagDays,cfg.mvrv.maxAgeDays);
+  if(cfg.mvrv.mode!=='off'&&!RAW.mvrv.slice(startIndex).some(Number.isFinite))throw new Error('MVRV is unavailable in this period. Refresh data, adjust its availability settings, or explicitly select Off.');
+  const bt=runBacktest(RAW.dates,RAW.prices,RAW.mvrv,signals,cfg,startIndex),bh=buyAndHoldEquity(RAW.dates,RAW.prices,cfg,startIndex);
+  const metrics=computeMetrics(RAW.dates,RAW.prices,startIndex,bt.equity,bt.trades,cfg,bt.openPosition),metricsHold=computeMetrics(RAW.dates,RAW.prices,startIndex,bh.eq,[],cfg,null);
+  const residual=metrics.finalEquity-cfg.initialCapital-metrics.realizedPnl-metrics.unrealizedPnl;
+  if(Math.abs(residual)>1e-7*Math.max(1,cfg.initialCapital,Math.abs(metrics.finalEquity)))throw new Error('Portfolio accounting did not reconcile.');
+  const baseCfg={...cfg,mvrv:{...cfg.mvrv,mode:'off'}};
+  const btBase=cfg.mvrv.mode==='off'?bt:runBacktest(RAW.dates,RAW.prices,RAW.mvrv,signals,baseCfg,startIndex);
+  const metricsBase=btBase===bt?metrics:computeMetrics(RAW.dates,RAW.prices,startIndex,btBase.equity,btBase.trades,baseCfg,btBase.openPosition);
+  const rollStrat=rollingReturn(RAW.dates,bt.equity,startIndex,state.rollWindowYears*YEAR_DAYS),rollHold=rollingReturn(RAW.dates,bh.eq,startIndex,state.rollWindowYears*YEAR_DAYS);
+  return {cfg,emaFast,emaSlow,signals,startIndex,bt,bh,metrics,metricsHold,btBase,metricsBase,rollStrat,rollHold};
+}
+function recompute(){
+  if(DATA_PENDING)return false;
+  if(!RAW.dates.length){showRunIssue('Load a valid price dataset to calculate results.');return false;}
+  try{
+    const cfg=readConfig();lastResult=computeRun(cfg);
+    renderTicker();renderPriceChart();renderEquityChart();renderDrawdownChart();renderDrawdownEpisodesCharts();renderTimeUnderwaterPanel();renderRollingRiskCharts();
+    renderRealizedPnlChart();renderUnderwaterHeatmap();renderRollingChart();renderMvrvChart();renderMetrics();renderMonthlyHeatmap();renderPnlHistogram();renderDurationScatter();renderFilterImpact();renderHoldVsTrade();
+    if(!sliderDragging)renderTradeLog();updateEntryReadout();$('inStartSlider').min=Math.max(cfg.emaFast,cfg.emaSlow)-1;$('inStartSlider').value=lastResult.startIndex;
+    const messages=['Fills: next available close · exposure at entry capped at 100% · risk statistics: complete UTC days'];
+    const absent=RAW.mvrv.slice(lastResult.startIndex).filter(v=>!Number.isFinite(v)).length;
+    if(cfg.mvrv.mode!=='off')messages.push('MVRV: '+cfg.mvrv.lagDays+' calendar-day lag, maximum age '+cfg.mvrv.maxAgeDays+'d'+(absent?' · '+absent+' bars unavailable: entries blocked, open positions exit on the next close':''));
+    else if(MVRV_ERROR)messages.push('MVRV could not load; its filter is explicitly Off.');
+    if(DATA_META?.missingBars)messages.push(DATA_META.missingBars+' price bars missing; EMA uses observed bars and incomplete daily returns are excluded.');
+    if(cfg.volSizing.enabled)messages.push('Sizing uses 14 complete daily returns; entries wait for its warm-up.');
+    if(daysBetween(RAW.dates[lastResult.startIndex],RAW.dates.at(-1))<POLICY.minCagrDays)messages.push('CAGR and Calmar need at least '+POLICY.minCagrDays+' days.');
+    if(lastResult.bt.insolvent)messages.push('Portfolio exhausted; trading stopped. A short-price gap may leave a deficit.');
+    const age=Date.now()-parseTs(RAW.dates.at(-1)).getTime();if(age>Math.max(2*intervalMs(state.timeframe),2*DAY_MS))messages.push('Latest price is '+Math.floor(age/DAY_MS)+' days old. Refresh to check for updates.');
+    $('runNotice').textContent=messages.join(' · ');$('runNotice').style.color=lastResult.bt.insolvent?'var(--red)':'var(--text-dim)';
+    $('statusLine').textContent=RAW.dates.length.toLocaleString('en-US')+' '+TF_LABELS[state.timeframe].toLowerCase()+' bars · fetched '+(DATA_META?fmtDate(DATA_META.fetchedAt):'locally');
+    $('exportSnapBtn').disabled=false;return true;
+  }catch(error){showRunIssue(error.message);console.error(error);return false;}
+}
+
+async function changeTimeframe(timeframe,refresh=false){
+  $('statusLine').textContent='Fetching '+TF_LABELS[timeframe].toLowerCase()+' data…';
+  try{
+    if(!await loadData(timeframe,refresh))return;
+    document.querySelectorAll('#timeframeGroup .pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.tf===state.timeframe));
+    $('inStartDate').min=RAW.dates[0].slice(0,10);$('inStartDate').max=RAW.dates.at(-1).slice(0,10);
+    initEntrySlider();recompute();if(charts.price){charts.price.resetZoom();syncPanSlider();}if(state.activeTab==='analysis')renderAnalysisTab();
+  }catch(error){
+    showRunIssue('Could not load '+TF_LABELS[timeframe].toLowerCase()+' data: '+error.message+' Refresh to retry.');
+    document.querySelectorAll('#timeframeGroup .pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.tf===state.timeframe));
+  }
+}
+
 
 /* ======================================================================
    RENDER: TICKER
 ====================================================================== */
 function renderTicker(){
+  if(!lastResult)return;
   const { emaFast, emaSlow, cfg, startIndex } = lastResult;
   const n = RAW.dates.length-1;
   $('tkPrice').textContent = '$'+fmtUSD(RAW.prices[n]);
@@ -2104,20 +2120,17 @@ function barsPerDay(){
 }
 
 function sliceRange(){
-  const n = RAW.dates.length;
-  if (state.priceRange === 'all') return { from: lastResult.startIndex, to: n-1 };
-  const bars = Number(state.priceRange) * barsPerDay();
-  return { from: Math.max(lastResult.startIndex, n-bars), to: n-1 };
+  const n=RAW.dates.length;
+  if(state.priceRange==='all')return {from:lastResult.startIndex,to:n-1};
+  return {from:Math.max(lastResult.startIndex,lowerBound(RAW.dates,parseTs(RAW.dates[n-1]).getTime()-Number(state.priceRange)*DAY_MS)),to:n-1};
 }
 
 // Same idea as sliceRange(), but for the Analysis tab: independent of the
 // backtest's Entry Date entirely, since these indicators aren't tied to any
 // backtest run — just how far back the person wants to look at raw price.
 function sliceAnalysisRange(){
-  const n = RAW.dates.length;
-  if (state.analysisRange === 'all') return { from: 0, to: n-1 };
-  const bars = Number(state.analysisRange) * barsPerDay();
-  return { from: Math.max(0, n-bars), to: n-1 };
+  const n=RAW.dates.length;
+  return {from:state.analysisRange==='all'?0:lowerBound(RAW.dates,parseTs(RAW.dates[n-1]).getTime()-Number(state.analysisRange)*DAY_MS),to:n-1};
 }
 
 // Computes every Analysis-tab indicator once over the FULL price history
@@ -2130,7 +2143,8 @@ function computeAnalysisIndicators(){
     macd: computeMACD(prices, 12, 26, 9),
     trendEff: computeTrendEfficiency(prices, 14),
     atr: computeCloseATR(prices, 14),
-    bb: computeBollinger(prices, 20, 2)
+    bb: computeBollinger(prices, 20, 2),
+    dailyVol: computeDailyVolatility(RAW.dates, prices, state.timeframe)
   };
 }
 
@@ -2191,6 +2205,7 @@ const regimeShadingPlugin = {
 };
 
 function renderPriceChart(){
+  if(!lastResult)return;
   const ctx = $('priceChart').getContext('2d');
   const { emaFast, emaSlow, bt } = lastResult;
   const { from, to } = sliceRange();
@@ -2220,9 +2235,9 @@ function renderPriceChart(){
     data:{
       labels,
       datasets:[
-        { label:'BTC', data:priceData, borderColor:themeVar('--text-faint'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true, order:3 },
-        { label:'EMA Fast', data:fastData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true, order:2 },
-        { label:'EMA Slow', data:slowData, borderColor:themeVar('--amber'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true, order:2 },
+        { label:'BTC', data:priceData, borderColor:themeVar('--text-faint'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:false, order:3 },
+        { label:'EMA Fast', data:fastData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false, order:2 },
+        { label:'EMA Slow', data:slowData, borderColor:themeVar('--amber'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false, order:2 },
         { label:'Buy', type:'scatter', data:buyPts, backgroundColor:themeVar('--green'), borderColor:themeVar('--green'), pointRadius:4.5, pointHoverRadius:6, showLine:false, order:1 },
         { label:'Sell', type:'scatter', data:sellPts, backgroundColor:themeVar('--red'), borderColor:themeVar('--red'), pointRadius:4.5, pointHoverRadius:6, showLine:false, order:1 },
         { label:'Entry', type:'scatter', data:entryPts, backgroundColor:themeVar('--violet'), borderColor:themeVar('--violet'), pointStyle:'rectRot', pointRadius:7, pointHoverRadius:9, showLine:false, order:0 }
@@ -2348,6 +2363,7 @@ function syncRegimeShadeUI(){
   legend.style.display = (state.regimeShade && filterOn) ? '' : 'none';
 }
 function renderEquityChart(){
+  if(!lastResult)return;
   const ctx = $('equityChart').getContext('2d');
   const { bt, bh, startIndex } = lastResult;
   const labels = RAW.dates.slice(startIndex);
@@ -2360,8 +2376,8 @@ function renderEquityChart(){
     data:{
       labels,
       datasets:[
-        { label:'Strategy', data:stratData, borderColor:themeVar('--green'), backgroundColor:hexAlpha(themeVar('--green'),0.08), fill:true, borderWidth:1.8, pointRadius:0, tension:0, spanGaps:true },
-        { label:'Buy & Hold', data:holdData, borderColor:themeVar('--text-faint'), borderWidth:1.3, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:true }
+        { label:'Strategy', data:stratData, borderColor:themeVar('--green'), backgroundColor:hexAlpha(themeVar('--green'),0.08), fill:true, borderWidth:1.8, pointRadius:0, tension:0, spanGaps:false },
+        { label:'Buy & Hold', data:holdData, borderColor:themeVar('--text-faint'), borderWidth:1.3, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:false }
       ]
     },
     options:{
@@ -2377,7 +2393,7 @@ function renderEquityChart(){
           callbacks:{ label: (item)=> item.dataset.label+': '+fmtUSDFull(item.parsed.y) }
         }
       },
-      scales: baseScales(gc, gc, state.eqScale)
+      scales: baseScales(gc, gc, stratData.some(v=>v<=0)?'linear':state.eqScale)
     }
   };
   if (charts.equity){
@@ -2399,6 +2415,7 @@ function percentileBounds(arr, lo, hi){
 }
 
 function renderRollingChart(){
+  if(!lastResult)return;
   const ctx = $('rollingChart').getContext('2d');
   const { rollStrat, rollHold, startIndex } = lastResult;
   const gc = gridColor();
@@ -2428,15 +2445,9 @@ function renderRollingChart(){
   const stratData = rollStrat.slice(firstValid);
   const holdData = rollHold.slice(firstValid);
 
-  // Clip the visible y-range to the 1st-99th percentile across both series so a rare
-  // parabolic outlier (e.g. BTC's 2013 rally) doesn't compress the rest of the chart.
-  const combined = stratData.concat(holdData);
-  let [pLo, pHi] = percentileBounds(combined, 0.01, 0.99);
-  let yMin, yMax;
-  if (pLo != null){
-    const pad = (pHi-pLo)*0.12 || 0.05;
-    yMin = pLo - pad; yMax = pHi + pad;
-  }
+  const combined=stratData.concat(holdData).filter(Number.isFinite);
+  let yMin,yMax;
+  if(combined.length){const lo=finiteMin(combined),hi=finiteMax(combined),pad=(hi-lo)*.08||.05;yMin=lo-pad;yMax=hi+pad;}
 
   const cfg = {
     type:'line',
@@ -2477,6 +2488,7 @@ function renderRollingChart(){
 }
 
 function renderMvrvChart(){
+  if(!lastResult)return;
   const ctx = $('mvrvChart').getContext('2d');
   const { startIndex, cfg } = lastResult;
   const labels = RAW.dates.slice(startIndex);
@@ -2494,7 +2506,7 @@ function renderMvrvChart(){
     data:{
       labels,
       datasets:[
-        { label:'MVRV', data:mvrvData, borderColor:themeVar('--violet'), backgroundColor:hexAlpha(themeVar('--violet'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true },
+        { label:'MVRV', data:mvrvData, borderColor:themeVar('--violet'), backgroundColor:hexAlpha(themeVar('--violet'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false },
         { label:'Long Exit', data:longExitLine, borderColor:themeVar('--red'), borderWidth:1, borderDash:[4,3], pointRadius:0, tension:0 },
         { label:'Long Reduce', data:longReduceLine, borderColor:themeVar('--amber'), borderWidth:1, borderDash:[2,3], pointRadius:0, tension:0 },
         { label:'Short Reduce', data:shortReduceLine, borderColor:themeVar('--amber'), borderWidth:1, borderDash:[2,3], pointRadius:0, tension:0 },
@@ -2553,11 +2565,12 @@ function hexAlpha(hex, alpha){
    RENDER: DRAWDOWN (UNDERWATER) CHART
 ====================================================================== */
 function renderDrawdownChart(){
+  if(!lastResult)return;
   const ctx = $('drawdownChart').getContext('2d');
   const { bt, bh, startIndex, metrics } = lastResult;
   const labels = RAW.dates.slice(startIndex);
-  const ddStrat = computeDrawdown(bt.equity, startIndex).slice(startIndex);
-  const ddHold = computeDrawdown(bh.eq, startIndex).slice(startIndex);
+  const ddStrat = metrics.dd.slice(startIndex);
+  const ddHold = lastResult.metricsHold.dd.slice(startIndex);
   const gc = gridColor();
 
   $('ddPeakBadge').textContent = 'Max: ' + fmtPct(metrics.maxDrawdown) + ' · Current: ' + fmtPct(metrics.trueDrawdown);
@@ -2567,8 +2580,8 @@ function renderDrawdownChart(){
     data:{
       labels,
       datasets:[
-        { label:'Strategy', data:ddStrat, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.14), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true },
-        { label:'Buy & Hold', data:ddHold, borderColor:themeVar('--text-faint'), borderWidth:1.1, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:true }
+        { label:'Strategy', data:ddStrat, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.14), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false },
+        { label:'Buy & Hold', data:ddHold, borderColor:themeVar('--text-faint'), borderWidth:1.1, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:false }
       ]
     },
     options:{
@@ -2604,6 +2617,7 @@ function renderDrawdownChart(){
    RENDER: DRAWDOWN EPISODES — depth vs. duration, and recovery economics
 ====================================================================== */
 function renderDrawdownEpisodesCharts(){
+  if(!lastResult)return;
   const scatterCtx = $('ddEpisodeScatterChart').getContext('2d');
   const barCtx = $('ddRecoveryBarChart').getContext('2d');
   const { metrics } = lastResult;
@@ -2638,7 +2652,7 @@ function renderDrawdownEpisodesCharts(){
           padding:10,
           callbacks:{
             title:(items)=> items.length ? 'Peak: '+fmtDate(items[0].raw.e.startDate) : '',
-            label:(item)=> [ 'Depth: '+fmtPct(item.raw.e.val), 'Duration: '+item.raw.e.durationDays+' d'+(item.raw.e.ongoing?' (ongoing)':' (recovered)') ]
+            label:(item)=> [ 'Depth: '+fmtPct(item.raw.e.val), 'Duration: '+fmtDays(item.raw.e.durationDays)+' d'+(item.raw.e.ongoing?' (ongoing)':' (recovered)') ]
           }
         }
       },
@@ -2690,6 +2704,7 @@ function renderDrawdownEpisodesCharts(){
    RENDER: TIME UNDERWATER (donut + stats)
 ====================================================================== */
 function renderTimeUnderwaterPanel(){
+  if(!lastResult)return;
   const ctx = $('timeUnderwaterChart').getContext('2d');
   const { metrics, startIndex } = lastResult;
   const tu = computeTimeUnderwater(RAW.dates, metrics.dd, startIndex);
@@ -2726,30 +2741,31 @@ function renderTimeUnderwaterPanel(){
   const longest = closedEps.length ? closedEps.reduce((a,e)=> durOf(e) > durOf(a) ? e : a) : null;
   const ongoing = eps.find(e=>e.ongoing);
 
-  $('tuUnderwaterDays').textContent = Math.round(tu.underwaterDays)+' d';
-  $('tuAtHighDays').textContent = Math.round(tu.atHighDays)+' d';
-  $('tuLongestEp').textContent = longest ? durOf(longest)+' d ('+fmtPct(longest.val)+' worst)' : '—';
-  $('tuCurrentEp').textContent = ongoing ? durOf(ongoing)+' d so far, now '+fmtPct(metrics.trueDrawdown) : 'At a new high';
+  $('tuUnderwaterDays').textContent = fmtDays(tu.underwaterDays)+' d';
+  $('tuAtHighDays').textContent = fmtDays(tu.atHighDays)+' d';
+  $('tuLongestEp').textContent = longest ? fmtDays(durOf(longest))+' d ('+fmtPct(longest.val)+' worst)' : '—';
+  $('tuCurrentEp').textContent = ongoing ? fmtDays(durOf(ongoing))+' d so far, now '+fmtPct(metrics.trueDrawdown) : 'At a new high';
 }
 
 /* ======================================================================
    RENDER: ROLLING DRAWDOWN & ROLLING SHARPE
 ====================================================================== */
 function renderRollingRiskCharts(){
+  if(!lastResult)return;
   const ddCtx = $('rollingDrawdownChart').getContext('2d');
   const shCtx = $('rollingSharpeChart').getContext('2d');
   const { bt, startIndex } = lastResult;
   const gc = gridColor();
 
-  const dd90 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 90).slice(startIndex);
-  const dd180 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 180).slice(startIndex);
+  const dd90 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 90, lastResult.cfg.initialCapital).slice(startIndex);
+  const dd180 = computeRollingDrawdown(RAW.dates, bt.equity, startIndex, 180, lastResult.cfg.initialCapital).slice(startIndex);
   const labels = RAW.dates.slice(startIndex);
 
   const ddCfg = {
     type:'line',
     data:{ labels, datasets:[
-      { label:'90d rolling max DD', data:dd90, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true },
-      { label:'180d rolling max DD', data:dd180, borderColor:themeVar('--red'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true }
+      { label:'90d rolling max DD', data:dd90, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:false },
+      { label:'180d rolling max DD', data:dd180, borderColor:themeVar('--red'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:false }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
@@ -2773,11 +2789,11 @@ function renderRollingRiskCharts(){
   if (charts.rollingDrawdown){ const c=charts.rollingDrawdown; c.data=ddCfg.data; c.options=ddCfg.options; c.update('none'); }
   else charts.rollingDrawdown = new Chart(ddCtx, ddCfg);
 
-  const sh = computeRollingSharpe(RAW.dates, bt.equity, startIndex, 180);
+  const sh = computeRollingSharpe(RAW.dates, bt.equity, startIndex, 180, POLICY.minRollingReturns, lastResult.cfg);
   const shCfg = {
     type:'line',
     data:{ labels: sh.labels, datasets:[
-      { label:'180d rolling Sharpe', data:sh.values, borderColor:themeVar('--cyan'), backgroundColor:hexAlpha(themeVar('--cyan'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+      { label:'180d rolling Sharpe', data:sh.values, borderColor:themeVar('--cyan'), backgroundColor:hexAlpha(themeVar('--cyan'),0.08), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
@@ -2806,6 +2822,7 @@ function renderRollingRiskCharts(){
    RENDER: REALIZED P&L DECOMPOSITION (cumulative winners vs losers)
 ====================================================================== */
 function renderRealizedPnlChart(){
+  if(!lastResult)return;
   const ctx = $('realizedPnlChart').getContext('2d');
   const trades = lastResult.bt.trades;
   const gc = gridColor();
@@ -2851,6 +2868,7 @@ function renderRealizedPnlChart(){
    RENDER: UNDERWATER HEATMAP (worst drawdown touched per month)
 ====================================================================== */
 function renderUnderwaterHeatmap(){
+  if(!lastResult)return;
   const wrap = $('ddHeatmapWrap');
   const { metrics, startIndex } = lastResult;
   const monthWorst = computeMonthlyUnderwaterHeatmap(RAW.dates, metrics.dd, startIndex);
@@ -2859,7 +2877,7 @@ function renderUnderwaterHeatmap(){
 
   const years = Array.from(new Set(keys.map(k=>k.slice(0,4)))).sort();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const maxAbs = Math.max(0.02, ...Array.from(monthWorst.values()).map(v=>Math.abs(v)));
+  const maxAbs = Math.max(0.02, finiteMax(Array.from(monthWorst.values()).map(v=>Math.abs(v))));
 
   function cellColor(v){
     const t = Math.min(1, Math.abs(v)/maxAbs);
@@ -2894,6 +2912,7 @@ function renderUnderwaterHeatmap(){
    RENDER: TRADE P&L HISTOGRAM
 ====================================================================== */
 function renderPnlHistogram(){
+  if(!lastResult)return;
   const ctx = $('pnlHistChart').getContext('2d');
   const trades = lastResult.bt.trades;
   $('histCount').textContent = '(' + trades.length + ' trades)';
@@ -2914,7 +2933,7 @@ function renderPnlHistogram(){
   const med = median(pcts);
   const mad = median(pcts.map(v=>Math.abs(v-med))) || 1;
   const robustSigma = mad * 1.4826;
-  const trueMaxAbs = Math.max(...pcts.map(Math.abs));
+  const trueMaxAbs = finiteMax(pcts.map(Math.abs));
   let maxAbs = Math.max(10, Math.ceil((Math.abs(med) + 4*robustSigma) / 5) * 5);
   maxAbs = Math.min(maxAbs, Math.max(10, Math.ceil(trueMaxAbs/5)*5));
 
@@ -2922,14 +2941,14 @@ function renderPnlHistogram(){
   const nBins = Math.ceil((maxAbs*2)/binSize);
   const start = -Math.ceil(nBins/2)*binSize;
   const end = start + nBins*binSize;
-  const clampedLow = Math.min(...pcts) < start;
-  const clampedHigh = Math.max(...pcts) > end;
+  const clampedLow = finiteMin(pcts) < start;
+  const clampedHigh = finiteMax(pcts) >= end;
   const bins = new Array(nBins).fill(0);
   const labels = [];
   for (let i=0;i<nBins;i++){
     const lo = start+i*binSize;
-    const prefix = (i===0 && clampedLow) ? '≤' : (i===nBins-1 && clampedHigh) ? '≥' : '';
-    labels.push(prefix + (lo>=0 && !prefix ? '+' : '') + lo + '%');
+    const hi=lo+binSize;
+    labels.push(i===0&&clampedLow?'< '+hi+'%':i===nBins-1&&clampedHigh?'≥ '+lo+'%':lo+' to <'+hi+'%');
   }
   pcts.forEach(p=>{
     let idx = Math.floor((p-start)/binSize);
@@ -2971,6 +2990,7 @@ function renderPnlHistogram(){
    RENDER: TRADE DURATION VS RETURN SCATTER
 ====================================================================== */
 function renderDurationScatter(){
+  if(!lastResult)return;
   const ctx = $('durationScatterChart').getContext('2d');
   const trades = lastResult.bt.trades;
   const gc = gridColor();
@@ -2981,15 +3001,17 @@ function renderDurationScatter(){
     return;
   }
 
-  const wins = trades.filter(t=>t.pnlPct>=0).map(t=>({x:t.holdDays, y:t.pnlPct*100}));
-  const losses = trades.filter(t=>t.pnlPct<0).map(t=>({x:t.holdDays, y:t.pnlPct*100}));
+  const wins = trades.filter(t=>tradeOutcome(t)>0).map(t=>({x:t.holdDays, y:t.pnlPct*100}));
+  const losses = trades.filter(t=>tradeOutcome(t)<0).map(t=>({x:t.holdDays, y:t.pnlPct*100}));
+  const breakevens = trades.filter(t=>tradeOutcome(t)===0).map(t=>({x:t.holdDays,y:0}));
 
   const cfg = {
     type:'scatter',
     data:{
       datasets:[
         { label:'Win', data:wins, backgroundColor:hexAlpha(themeVar('--green'),0.75), borderColor:themeVar('--green'), pointRadius:5, pointHoverRadius:7 },
-        { label:'Loss', data:losses, backgroundColor:hexAlpha(themeVar('--red'),0.75), borderColor:themeVar('--red'), pointRadius:5, pointHoverRadius:7 }
+        { label:'Loss', data:losses, backgroundColor:hexAlpha(themeVar('--red'),0.75), borderColor:themeVar('--red'), pointRadius:5, pointHoverRadius:7 },
+        { label:'Breakeven', data:breakevens, backgroundColor:themeVar('--text-faint'), pointRadius:5, pointHoverRadius:7 }
       ]
     },
     options:{
@@ -3001,7 +3023,7 @@ function renderDurationScatter(){
           titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
           titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
           padding:10,
-          callbacks:{ label:(item)=> item.parsed.x.toFixed(1)+'d held · '+(item.parsed.y>=0?'+':'')+item.parsed.y.toFixed(2)+'%' }
+          callbacks:{ label:(item)=> item.dataset.label+' · '+fmtDays(item.parsed.x)+'d held · '+(item.parsed.y>=0?'+':'')+item.parsed.y.toFixed(2)+'%' }
         }
       },
       scales:{
@@ -3022,81 +3044,22 @@ function renderDurationScatter(){
    RENDER: MONTHLY RETURNS HEATMAP
 ====================================================================== */
 function renderMonthlyHeatmap(){
-  const wrap = $('heatmapWrap');
-  const { bt, startIndex } = lastResult;
-  const dates = RAW.dates.slice(startIndex);
-  const equity = bt.equity.slice(startIndex);
-
-  // Find the last equity value recorded for each calendar month.
-  const monthEnd = new Map(); // 'YYYY-MM' -> equity
-  for (let i=0;i<dates.length;i++){
-    if (equity[i]==null) continue;
-    const key = dates[i].slice(0,7);
-    monthEnd.set(key, equity[i]);
+  if(!lastResult)return;
+  const {bt,startIndex,cfg}=lastResult,wrap=$('heatmapWrap');
+  const months=calendarReturns(RAW.dates,bt.equity,startIndex,cfg.initialCapital,cfg.timeframe,'month');
+  const yearly=calendarReturns(RAW.dates,bt.equity,startIndex,cfg.initialCapital,cfg.timeframe,'year');
+  if(!months.length){wrap.textContent='No monthly returns available.';return;}
+  const monthMap=new Map(months.map(r=>[r.key,r])),names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const maxAbs=Math.max(.02,finiteMax(months.concat(yearly).map(r=>Math.abs(r.value)),.02));
+  function cell(rec,year=false){
+    if(!rec||!Number.isFinite(rec.value))return '<td class="hm-cell empty">·</td>';
+    const r=rec.value,bg=hexAlpha(themeVar(r>=0?'--green':'--red'),.28+.62*Math.min(1,Math.abs(r)/maxAbs));
+    return '<td class="hm-cell '+(year?'hm-year-total':'')+'" style="background:'+bg+';color:var(--text)" title="'+escAttr(rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':''))+'">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</td>';
   }
-  const keys = Array.from(monthEnd.keys()).sort();
-  if (keys.length < 2){ wrap.innerHTML = '<div style="color:var(--text-faint); font-size:12px; padding:8px 2px;">Not enough history yet for a monthly breakdown.</div>'; $('heatmapLegend').innerHTML=''; return; }
-
-  // Monthly return = this month-end equity / previous month-end equity - 1.
-  const monthReturns = new Map();
-  for (let i=1;i<keys.length;i++){
-    const prev = monthEnd.get(keys[i-1]), cur = monthEnd.get(keys[i]);
-    if (prev>0) monthReturns.set(keys[i], cur/prev - 1);
-  }
-
-  const years = Array.from(new Set(keys.map(k=>k.slice(0,4)))).sort();
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-  const allVals = Array.from(monthReturns.values());
-  const maxAbs = Math.max(0.02, ...allVals.map(v=>Math.abs(v)));
-
-  function cellColor(v){
-    if (v==null) return null;
-    const t = Math.min(1, Math.abs(v)/maxAbs);
-    const base = v>=0 ? themeVar('--green') : themeVar('--red');
-    // blend from neutral surface toward the base color by intensity t
-    const alpha = 0.28 + t*0.62;
-    return hexAlpha(base, alpha);
-  }
-
-  let html = '<table class="heatmap-table"><thead><tr><th class="hm-year-h">Year</th>';
-  monthNames.forEach(m=> html += `<th>${m}</th>`);
-  html += '<th>Year</th></tr></thead><tbody>';
-
-  years.forEach(y=>{
-    html += `<tr><td class="hm-year">${y}</td>`;
-    let yearStartEq = null, yearEndEq = null;
-    for (let m=1;m<=12;m++){
-      const key = y+'-'+String(m).padStart(2,'0');
-      if (!monthEnd.has(key)){ html += '<td class="hm-cell empty">·</td>'; continue; }
-      if (yearStartEq==null){
-        const idx = keys.indexOf(key);
-        yearStartEq = idx>0 ? monthEnd.get(keys[idx-1]) : monthEnd.get(key);
-      }
-      yearEndEq = monthEnd.get(key);
-      const r = monthReturns.get(key);
-      if (r==null){ html += '<td class="hm-cell neutral">·</td>'; continue; }
-      const bg = cellColor(r);
-      const txtColor = Math.abs(r)/maxAbs > 0.45 ? '#0a0e14' : 'var(--text)';
-      html += `<td class="hm-cell" style="background:${bg}; color:${txtColor};" title="${monthNames[m-1]} ${y}: ${fmtSignedPct(r,1)}">${(r>=0?'+':'')+(r*100).toFixed(1)}</td>`;
-    }
-    const yearReturn = (yearStartEq && yearEndEq && yearStartEq>0) ? (yearEndEq/yearStartEq - 1) : null;
-    if (yearReturn==null){
-      html += '<td class="hm-cell hm-year-total empty">·</td>';
-    } else {
-      const bg = cellColor(yearReturn);
-      const txtColor = Math.abs(yearReturn)/maxAbs > 0.45 ? '#0a0e14' : 'var(--text)';
-      html += `<td class="hm-cell hm-year-total" style="background:${bg}; color:${txtColor};">${(yearReturn>=0?'+':'')+(yearReturn*100).toFixed(1)}</td>`;
-    }
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
-
-  $('heatmapLegend').innerHTML =
-    '<div class="legend-item"><span class="legend-swatch" style="background:'+hexAlpha(themeVar('--green'),0.75)+'"></span> Positive month</div>' +
-    '<div class="legend-item"><span class="legend-swatch" style="background:'+hexAlpha(themeVar('--red'),0.75)+'"></span> Negative month</div>' +
-    '<div class="legend-item" style="color:var(--text-faint)">Values in % · rightmost column is full-year return</div>';
+  let html='<table class="heatmap-table"><thead><tr><th class="hm-year-h">Year</th>'+names.map(n=>'<th>'+n+'</th>').join('')+'<th>Year / YTD</th></tr></thead><tbody>';
+  for(const y of yearly){html+='<tr><td class="hm-year">'+y.key+'</td>';for(let m=1;m<=12;m++)html+=cell(monthMap.get(y.key+'-'+String(m).padStart(2,'0')));html+=cell(y,true)+'</tr>';}
+  wrap.innerHTML=html+'</tbody></table>';
+  $('heatmapLegend').textContent='Values in % · first period includes entry costs · * partial month or year · year totals compound from the prior year-end or initial capital.';
 }
 
 /* ======================================================================
@@ -3117,7 +3080,7 @@ function renderRSIChart(){
   const cfg = {
     type:'line',
     data:{ labels, datasets:[
-      { label:'RSI(14)', data, borderColor:themeVar('--violet'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+      { label:'RSI(14)', data, borderColor:themeVar('--violet'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
@@ -3190,8 +3153,8 @@ function renderMACDChart(){
       labels,
       datasets:[
         { type:'bar', label:'Histogram', data:histData, backgroundColor:histColors, borderWidth:0, order:2, categoryPercentage:1, barPercentage:1 },
-        { type:'line', label:'MACD', data:macdData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true, order:0 },
-        { type:'line', label:'Signal', data:sigData, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:true, order:1 }
+        { type:'line', label:'MACD', data:macdData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false, order:0 },
+        { type:'line', label:'Signal', data:sigData, borderColor:themeVar('--amber'), borderWidth:1.4, pointRadius:0, tension:0, spanGaps:false, order:1 }
       ]
     },
     options:{
@@ -3232,7 +3195,7 @@ function renderTrendEffChart(){
   const cfg = {
     type:'line',
     data:{ labels, datasets:[
-      { label:'Trend Efficiency', data, borderColor:themeVar('--amber'), backgroundColor:hexAlpha(themeVar('--amber'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+      { label:'Trend Efficiency', data, borderColor:themeVar('--amber'), backgroundColor:hexAlpha(themeVar('--amber'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
@@ -3244,7 +3207,7 @@ function renderTrendEffChart(){
           titleColor: themeVar('--text'), bodyColor: themeVar('--text-dim'),
           titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:11},
           padding:10,
-          callbacks:{ label:(item)=> item.parsed.y==null ? '—' : item.parsed.y.toFixed(1)+(item.parsed.y>=25?' (trending)':' (choppy)') }
+          callbacks:{ label:(item)=> item.parsed.y==null ? '—' : item.parsed.y.toFixed(1)+(item.parsed.y>=25?' (above guide)':' (below guide)') }
         }
       },
       scales:{
@@ -3274,7 +3237,7 @@ function renderVolatilityCharts(){
     const cfg = {
       type:'line',
       data:{ labels, datasets:[
-        { label:'Close-ATR(14)', data:atrData, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+        { label:'Close-ATR(14)', data:atrData, borderColor:themeVar('--red'), backgroundColor:hexAlpha(themeVar('--red'),0.10), fill:true, borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false }
       ]},
       options:{
         responsive:true, maintainAspectRatio:false, animation:false,
@@ -3312,10 +3275,10 @@ function renderVolatilityCharts(){
     const cfg = {
       type:'line',
       data:{ labels, datasets:[
-        { label:'Upper', data:upperData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:true, fill:'+1', backgroundColor:hexAlpha(themeVar('--cyan'),0.06) },
-        { label:'Lower', data:lowerData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:true },
-        { label:'SMA(20)', data:midData, borderColor:themeVar('--amber'), borderWidth:1.2, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:true },
-        { label:'Close', data:priceData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:true }
+        { label:'Upper', data:upperData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:false, fill:'+1', backgroundColor:hexAlpha(themeVar('--cyan'),0.06) },
+        { label:'Lower', data:lowerData, borderColor:hexAlpha(themeVar('--text-faint'),0.7), borderWidth:1, pointRadius:0, tension:0, spanGaps:false },
+        { label:'SMA(20)', data:midData, borderColor:themeVar('--amber'), borderWidth:1.2, borderDash:[3,3], pointRadius:0, tension:0, spanGaps:false },
+        { label:'Close', data:priceData, borderColor:themeVar('--cyan'), borderWidth:1.6, pointRadius:0, tension:0, spanGaps:false }
       ]},
       options:{
         responsive:true, maintainAspectRatio:false, animation:false,
@@ -3370,53 +3333,51 @@ function metricCard(label, val, holdVal, sub, cls, tip){
 }
 
 function renderMetrics(){
-  const m = lastResult.metrics;
-  const h = lastResult.metricsHold;
-  const cfg = lastResult.cfg;
-  const rollLabel = rollWindowLabel(state.rollWindowYears);
-  const rollDays = Math.max(1, Math.round(state.rollWindowYears*365.25));
-  const holdRoll = lastValid(lastResult.rollHold);
-
-  $('grpReturn').innerHTML = [
-    metricCard('Final Equity', fmtUSDFull(m.finalEquity), fmtUSDFull(h.finalEquity), null, m.finalEquity>=cfg.initialCapital?'pos':'neg', 'Portfolio value at the final bar of the backtest, including all realized and any open-position gains or losses.'),
-    metricCard('CAGR', fmtSignedPct(m.cagr), fmtSignedPct(h.cagr), 'compound annual growth rate', m.cagr>=0?'pos':'neg', 'Geometric compound annual growth rate over the full backtest period: (Final/Initial)^(1/years) − 1.'),
-    metricCard('Annualized Return', fmtSignedPct(m.annualizedReturn), fmtSignedPct(h.annualizedReturn), 'mean of yearly returns', m.annualizedReturn>=0?'pos':'neg', 'Arithmetic mean of each calendar year return — distinct from CAGR, which compounds geometrically.'),
-    metricCard('Years of Investment', m.years.toFixed(2)+' yrs', h.years.toFixed(2)+' yrs', null, null, 'Elapsed time from the actual backtest start date to the final bar, in years.'),
-    metricCard('Rolling '+rollLabel+' Return', fmtSignedPct(lastValid(lastResult.rollStrat)), fmtSignedPct(holdRoll), 'trailing '+rollDays+'d, latest', lastValid(lastResult.rollStrat)>=0?'pos':'neg', 'Return over the most recent '+rollDays+'-day trailing window.')
+  if(!lastResult)return;
+  const {metrics:m,metricsHold:h,cfg,bt,bh}=lastResult;
+  const sign=v=>v==null?'':v>=0?'pos':'neg',ratio=v=>v==null?'—':v===Infinity?'∞':Number.isFinite(v)?v.toFixed(2):'—';
+  const frequency=v=>Number.isFinite(v)?v.toFixed(1)+' / yr':'—';
+  const rollLabel=rollWindowLabel(state.rollWindowYears),rollDays=state.rollWindowYears*YEAR_DAYS,roll=lastValid(lastResult.rollStrat),holdRoll=lastValid(lastResult.rollHold);
+  $('grpReturn').innerHTML=[
+    metricCard('Final Equity',fmtUSDFull(m.finalEquity),fmtUSDFull(h.finalEquity),bt.insolvent?'portfolio exhausted':null,sign(m.finalEquity-cfg.initialCapital),'Mark-to-market value after actual entry, exit, slippage and carry costs. An open position is not hypothetically liquidated.'),
+    metricCard('CAGR',fmtSignedPct(m.cagr),fmtSignedPct(h.cagr),'minimum '+POLICY.minCagrDays+' days',sign(m.cagr),'(Final / Initial)^(1 / exact elapsed years) − 1. Short histories are not annualized; zero capital is a total loss.'),
+    metricCard('Mean Full-Year Return',fmtSignedPct(m.annualizedReturn),fmtSignedPct(h.annualizedReturn),m.completeYears+' complete calendar years',sign(m.annualizedReturn),'Arithmetic mean of full calendar-year returns. Partial years appear in the heatmap and are excluded here.'),
+    metricCard('Years of Investment',m.years.toFixed(3)+' yrs',h.years.toFixed(3)+' yrs',null,null,'Exact elapsed UTC time; holding durations are not rounded before calculation.'),
+    metricCard('Rolling '+rollLabel+' Return',fmtSignedPct(roll),fmtSignedPct(holdRoll),'trailing '+rollDays.toFixed(1)+'d',sign(roll),'Uses the last observation at or before the calendar lookback date. A missing boundary is not replaced with a later price.'),
+    metricCard('Trading Fees',fmtUSDFull(bt.totalFees),fmtUSDFull(bh.entryFee),'entry + actual exit fills',null,'Fees are charged on traded BTC quantity × execution price, and included in net trade P&L.'),
+    metricCard('Short Carry Paid',fmtUSDFull(bt.totalCarry),fmtUSDFull(0),'configured annual cost',null,'Simple annual carry on prior-bar short notional, integrated over elapsed time; not historical exchange funding.'),
+    metricCard('Realized P&L',fmtUSDFull(m.realizedPnl),null,'closed trades, all costs',sign(m.realizedPnl),'Net P&L includes entry fees, exit fees, slippage and carry.'),
+    metricCard('Open P&L',fmtUSDFull(m.unrealizedPnl),null,bt.openPosition?bt.openPosition.side.toUpperCase()+' open':'no open position',sign(m.unrealizedPnl),'Mark-to-market P&L includes paid entry costs and carry; no unexecuted closing fee. Initial capital + realized P&L + open P&L reconciles to final equity.')
   ].join('');
-
-  $('grpTrades').innerHTML = [
-    metricCard('Total Trades', m.totalTrades, '0', m.tradesPerYear.toFixed(1)+' / yr', null, 'Total number of completed round-trip trades (entry plus exit) over the full backtest.'),
-    metricCard('Win Rate', fmtPct(m.winRate), null, m.totalTrades+' closed trades', m.winRate>=0.5?'pos':'neg', 'Share of closed trades that ended with a positive return.'),
-    metricCard('Profit Factor', m.profitFactor==Infinity?'∞':(m.profitFactor!=null?m.profitFactor.toFixed(2):'—'), null, 'gross profit / gross loss', (m.profitFactor==null?'':(m.profitFactor>=1?'pos':'neg')), 'Sum of dollar gains on winning trades divided by the absolute sum of dollar losses on losing trades.'),
-    metricCard('Max Profit', fmtSignedPct(m.maxProfit), null, 'best single trade', 'pos', 'Largest percentage gain from any single closed trade in the backtest.'),
-    metricCard('Min Profit (Positive)', fmtSignedPct(m.minProfitPositive), null, 'smallest winning trade', 'pos', 'The smallest return among trades that were still profitable — the "weakest win."'),
-    metricCard('Average Profit', fmtSignedPct(m.avgProfit), null, 'mean return, all trades', m.avgProfit>=0?'pos':'neg', 'Mean percentage return across every closed trade, wins and losses combined.')
+  $('grpTrades').innerHTML=[
+    metricCard('Total Trades',m.totalTrades,'0',frequency(m.tradesPerYear),null,'Completed round trips; any open position is listed separately in the trade log.'),
+    metricCard('Win Rate',fmtPct(m.winRate),null,m.totalTrades+' closed · '+m.breakevens+' breakeven',null,'Net positive trades / all closed trades. Breakeven trades are a separate class and remain in the denominator.'),
+    metricCard('Profit Factor',ratio(m.profitFactor),null,'net gains / absolute net losses',null,'Dollar gains divided by absolute dollar losses after all modeled costs; no-loss samples may produce infinity.'),
+    metricCard('Max Profit',fmtSignedPct(m.maxProfit),null,'best closed trade',sign(m.maxProfit),'Best net percentage return; can be negative when all trades lost.'),
+    metricCard('Min Profit (Positive)',fmtSignedPct(m.minProfitPositive),null,'smallest winning trade',sign(m.minProfitPositive),'Smallest strictly positive net trade return.'),
+    metricCard('Average Profit',fmtSignedPct(m.avgProfit),null,'mean net return, all trades',sign(m.avgProfit),'Unweighted arithmetic mean of net trade returns on each trade’s cash budget; not a portfolio return.')
   ].join('');
-
-  $('grpDrawdown').innerHTML = [
-    metricCard('Max Drawdown', fmtPct(m.maxDrawdown), fmtPct(h.maxDrawdown), 'deepest peak-to-trough', 'neg', 'The largest peak-to-trough decline in equity observed at any point in the backtest.'),
-    metricCard('Min Drawdown', fmtPct(m.minDrawdown), fmtPct(h.minDrawdown), 'shallowest episode', 'neg', 'The smallest-magnitude decline among completed drawdown episodes.'),
-    metricCard('Average Drawdown', fmtPct(m.avgDrawdown), fmtPct(h.avgDrawdown), m.eps.length+' episodes', 'neg', 'Mean depth of all completed drawdown episodes, from peak through trough to recovery.'),
-    metricCard('True Drawdown', fmtPct(m.trueDrawdown), fmtPct(h.trueDrawdown), 'live, from all-time high', m.trueDrawdown>=-0.0001?'pos':'neg', 'Current distance below the all-time equity high, as of the most recent bar. 0% means presently at a new high.')
+  $('grpDrawdown').innerHTML=[
+    metricCard('Max Drawdown',fmtPct(m.maxDrawdown),fmtPct(h.maxDrawdown),'deepest bar-level decline','neg','Running peak starts at initial capital, so the first entry cost is included.'),
+    metricCard('Min Drawdown',fmtPct(m.minDrawdown),fmtPct(h.minDrawdown),'shallowest recovered episode','neg','Recovered episodes only; unavailable until an episode recovers.'),
+    metricCard('Average Drawdown',fmtPct(m.avgDrawdown),fmtPct(h.avgDrawdown),m.closedEpisodes+' recovered episodes','neg','Mean trough depth of recovered episodes. Ongoing episodes are charted separately.'),
+    metricCard('True Drawdown',fmtPct(m.trueDrawdown),fmtPct(h.trueDrawdown),'current distance from peak',sign(m.trueDrawdown),'Latest sampled equity / previous highest equity − 1.')
   ].join('');
-
-  const fmtRatio = (v)=> v==null ? '—' : (v===Infinity ? '∞' : v.toFixed(2));
-  $('grpRisk').innerHTML = [
-    metricCard('Sharpe Ratio', fmtRatio(m.sharpe), fmtRatio(h.sharpe), 'return ÷ volatility, ann.', m.sharpe==null?null:(m.sharpe>=1?'pos':(m.sharpe<0?'neg':null)), 'Annualized daily return divided by annualized daily volatility. Risk-free rate assumed 0. Above 1 is generally considered good; above 2, very good.'),
-    metricCard('Sortino Ratio', fmtRatio(m.sortino), fmtRatio(h.sortino), 'return ÷ downside vol., ann.', m.sortino==null?null:(m.sortino>=1?'pos':(m.sortino<0?'neg':null)), 'Like Sharpe, but only penalizes downside volatility (negative days) — upside swings do not count against it.'),
-    metricCard('Calmar Ratio', fmtRatio(m.calmar), fmtRatio(h.calmar), 'CAGR ÷ |max drawdown|', m.calmar==null?null:(m.calmar>=0.5?'pos':(m.calmar<0?'neg':null)), 'CAGR divided by the absolute value of max drawdown — how much annual growth you got per unit of worst-case pain.'),
-    metricCard('Ulcer Index', m.ulcerIndex!=null?m.ulcerIndex.toFixed(2):'—', h.ulcerIndex!=null?h.ulcerIndex.toFixed(2):'—', 'RMS depth × duration underwater', null, 'A "pain" score that accounts for both how deep and how long drawdowns were, not just the single worst one. Lower is better; 0 means never below a prior high.')
+  $('grpRisk').innerHTML=[
+    metricCard('Sharpe Ratio',ratio(m.sharpe),ratio(h.sharpe),m.dailyReturnCount+' complete daily returns',sign(m.sharpe),'Mean daily excess return / sample SD (N−1), scaled by √365.25. Risk-free rate: '+fmtPct(cfg.riskFreeRate)+' per year. Incomplete or nonconsecutive daily returns are excluded.'),
+    metricCard('Sortino Ratio',ratio(m.sortino),ratio(h.sortino),'target '+fmtPct(cfg.downsideTarget)+' / year',sign(m.sortino),'Mean return above the target / lower partial deviation, using all N daily observations in the downside denominator, scaled by √365.25.'),
+    metricCard('Calmar Ratio',ratio(m.calmar),ratio(h.calmar),'CAGR / |bar-level max DD|',sign(m.calmar),'Uses full-period CAGR and bar-level maximum drawdown; does not require the Sharpe sample count.'),
+    metricCard('Ulcer Index',ratio(m.ulcerIndex),ratio(h.ulcerIndex),'RMS daily drawdown (%)',null,'Root mean square of UTC day-end drawdown percentages, with initial capital as the first peak. Daily sampling can miss intraday lows.')
   ].join('');
-
-  $('grpTiming').innerHTML = [
-    metricCard('Max Consecutive Wins', m.maxWinStreak, null, null, 'pos', 'Longest streak of back-to-back winning trades.'),
-    metricCard('Max Consecutive Losses', m.maxLossStreak, null, null, 'neg', 'Longest streak of back-to-back losing trades.'),
-    metricCard('Profit Hold Time', m.profitHold!=null?m.profitHold.toFixed(1)+' d':'—', null, 'avg. winning trade', null, 'Average number of days a winning trade was held from entry to exit.'),
-    metricCard('Drawdown Hold Time', m.lossHold!=null?m.lossHold.toFixed(1)+' d':'—', null, 'avg. losing trade', null, 'Average number of days a losing trade was held from entry to exit.'),
-    metricCard('Overall Hold Range', m.holdRange?m.holdRange[0]+' – '+m.holdRange[1]+' d':'—', null, 'min – max across all trades', null, 'Shortest and longest holding periods, in days, across all closed trades.')
+  $('grpTiming').innerHTML=[
+    metricCard('Max Consecutive Wins',m.maxWinStreak,null,null,'pos','Breakeven trades break both streak types.'),
+    metricCard('Max Consecutive Losses',m.maxLossStreak,null,null,'neg','Only strictly negative net trades count as losses.'),
+    metricCard('Profit Hold Time',m.profitHold==null?'—':fmtDays(m.profitHold)+' d',null,'avg. winning trade',null,'Exact elapsed time from entry fill to exit fill.'),
+    metricCard('Losing Trade Hold Time',m.lossHold==null?'—':fmtDays(m.lossHold)+' d',null,'avg. losing trade',null,'Duration of losing trades, not time underwater below an equity high.'),
+    metricCard('Overall Hold Range',m.holdRange?m.holdRange.map(fmtDays).join(' – ')+' d':'—',null,'closed trades',null,'Minimum and maximum unrounded holding duration.')
   ].join('');
 }
+
 
 function deltaCls(withVal, baseVal, higherIsBetter){
   if (withVal==null || baseVal==null) return null;
@@ -3426,14 +3387,15 @@ function deltaCls(withVal, baseVal, higherIsBetter){
 }
 
 function renderFilterImpact(){
+  if(!lastResult)return;
   const m = lastResult.metrics, b = lastResult.metricsBase;
   const filterOn = lastResult.cfg.mvrv.mode !== 'off';
   const sub = (withV, baseV, fmt) => filterOn ? ('baseline: '+fmt(baseV)) : 'filter is off — identical to baseline';
 
   $('grpFilterImpact').innerHTML = [
-    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), null, sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true), 'Final equity for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
-    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), null, sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true), 'Compound annual growth rate for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
-    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), null, sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,false), 'Max drawdown for this run, compared against an EMA-only baseline over the same dates with the MVRV filter switched off.'),
+    metricCard('Final Equity (Filtered)', fmtUSDFull(m.finalEquity), null, sub(m.finalEquity,b.finalEquity,fmtUSDFull), deltaCls(m.finalEquity,b.finalEquity,true), 'Final equity for this run, compared against the same strategy without MVRV over the same dates with the MVRV filter switched off.'),
+    metricCard('CAGR (Filtered)', fmtSignedPct(m.cagr), null, sub(m.cagr,b.cagr,fmtSignedPct), deltaCls(m.cagr,b.cagr,true), 'Compound annual growth rate for this run, compared against the same strategy without MVRV over the same dates with the MVRV filter switched off.'),
+    metricCard('Max Drawdown (Filtered)', fmtPct(m.maxDrawdown), null, sub(m.maxDrawdown,b.maxDrawdown,fmtPct), deltaCls(m.maxDrawdown,b.maxDrawdown,true), 'Max drawdown for this run, compared against the same strategy without MVRV over the same dates with the MVRV filter switched off.'),
     metricCard('Total Trades (Filtered)', m.totalTrades, null, sub(m.totalTrades,b.totalTrades,(v)=>String(v)), null, 'Trade count often drops under the filter — that\'s the gate/force-exit doing its job, not a bug.')
   ].join('');
 }
@@ -3447,6 +3409,7 @@ function lastValid(arr){
    RENDER: HOLDING VS TRADING
 ====================================================================== */
 function renderHoldVsTrade(){
+  if(!lastResult)return;
   const { bt, bh, cfg, startIndex } = lastResult;
   const n = RAW.dates.length-1;
   const stratWorth = bt.equity[n];
@@ -3476,29 +3439,19 @@ function renderHoldVsTrade(){
 /* ======================================================================
    RENDER: TRADE LOG
 ====================================================================== */
-const EXIT_REASON_LABEL = { signal:'EMA Cross', mvrv:'MVRV Filter', atrStop:'ATR Stop' };
-const EXIT_REASON_COLOR = { signal:'var(--text-dim)', mvrv:'var(--violet)', atrStop:'var(--amber)' };
+const EXIT_REASON_LABEL = { signal:'EMA Cross', mvrv:'MVRV Filter', atrStop:'ATR Stop', data:'MVRV unavailable', insolvent:'Capital exhausted' };
+const EXIT_REASON_COLOR = { signal:'var(--text-dim)', mvrv:'var(--violet)', atrStop:'var(--amber)', data:'var(--amber)', insolvent:'var(--red)' };
 function renderTradeLog(){
-  const { bt } = lastResult;
-  const rows = bt.trades.map((t,i)=>{
-    const posCls = t.pnlPct>=0 ? 'pos' : 'neg';
-    const reasonLabel = EXIT_REASON_LABEL[t.exitReason] || t.exitReason || '—';
-    const reasonColor = EXIT_REASON_COLOR[t.exitReason] || 'var(--text-dim)';
-    return `<tr>
-      <td>${i+1}</td>
-      <td><span class="side-tag ${t.side}">${t.side.toUpperCase()}</span></td>
-      <td>${t.entryDate}</td>
-      <td>$${fmtUSD(t.entryPrice)}</td>
-      <td>${t.exitDate}</td>
-      <td>$${fmtUSD(t.exitPrice)}</td>
-      <td style="color:${reasonColor}; font-size:11px;">${reasonLabel}</td>
-      <td>${t.holdDays}</td>
-      <td class="${posCls==='pos'?'':''}" style="color:${t.pnlPct>=0?'var(--green)':'var(--red)'}">${fmtSignedPct(t.pnlPct)}</td>
-      <td style="color:${t.pnlDollar>=0?'var(--green)':'var(--red)'}">${t.pnlDollar>=0?'+':''}${fmtUSD(t.pnlDollar)}</td>
-    </tr>`;
-  }).reverse().join('');
-  $('tradeLogBody').innerHTML = rows || '<tr><td colspan="10" style="text-align:center; color:var(--text-faint); padding:20px;">No closed trades in this configuration yet.</td></tr>';
+  if(!lastResult)return;
+  const {bt}=lastResult;
+  const rows=bt.trades.map((t,i)=>{
+    const outcome=tradeOutcome(t),color=outcome>0?'var(--green)':outcome<0?'var(--red)':'var(--text-dim)';
+    return '<tr><td>'+(i+1)+'</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.entryDate))+'</td><td>$'+fmtUSD(t.entryPrice)+'</td><td>'+escAttr(fmtDate(t.exitDate))+'</td><td>$'+fmtUSD(t.exitPrice)+'</td><td style="color:'+(EXIT_REASON_COLOR[t.exitReason]||'var(--text-dim)')+'">'+escAttr(EXIT_REASON_LABEL[t.exitReason]||t.exitReason)+'</td><td>'+fmtDays(t.holdDays)+'</td><td style="color:'+color+'">'+fmtSignedPct(t.pnlPct)+'</td><td style="color:'+color+'" title="Entry fee '+fmtUSDFull(t.entryFee)+'; exit fee '+fmtUSDFull(t.exitFee)+'; carry '+fmtUSDFull(t.carry)+'">'+(t.pnlDollar>=0?'+':'')+fmtUSD(t.pnlDollar)+'</td></tr>';
+  }).reverse();
+  if(bt.openPosition){const t=bt.openPosition;rows.unshift('<tr><td>OPEN</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.date))+'</td><td>$'+fmtUSD(t.price)+'</td><td colspan="3">Mark-to-market · '+t.quantity.toFixed(8)+' BTC</td><td>'+fmtDays(daysBetween(t.date,RAW.dates.at(-1)))+'</td><td>'+fmtSignedPct(t.unrealizedPnl/t.amount)+'</td><td>'+fmtUSDFull(t.unrealizedPnl)+'</td></tr>');}
+  $('tradeLogBody').innerHTML=rows.join('')||'<tr><td colspan="10" style="text-align:center;padding:20px">No trades in this configuration.</td></tr>';
 }
+
 
 /* ======================================================================
    EVENTS
@@ -3540,7 +3493,7 @@ function wireEvents(){
     });
   });
 
-  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit','inAtrMult','inVolTarget'].forEach(id=>{
+  ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit','inAtrMult','inVolTarget','inSlippage','inShortCarry','inRiskFree','inDownsideTarget','inMvrvLag','inMvrvAge'].forEach(id=>{
     let t;
     $(id).addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(recompute, 260); });
   });
@@ -3560,22 +3513,8 @@ function wireEvents(){
     });
   })();
 
-  // Backtest-start date field: keep the entry slider in sync
-  (function(){
-    let t;
-    $('inStartDate').addEventListener('input', ()=>{
-      clearTimeout(t);
-      t = setTimeout(()=>{
-        if (RAW.dates.length){
-          let idx = RAW.dates.findIndex(d => d >= $('inStartDate').value);
-          if (idx < 0) idx = RAW.dates.length - 1;
-          $('inStartSlider').value = idx;
-          $('entryDateLabel').textContent = 'ENTRY: ' + fmtDate(RAW.dates[idx]);
-        }
-        recompute();
-      }, 260);
-    });
-  })();
+  // A typed date intentionally selects midnight; the slider stores an exact bar.
+  (function(){let timer;$('inStartDate').addEventListener('input',()=>{state.startTimestamp=null;clearTimeout(timer);timer=setTimeout(recompute,260);});})();
 
   // Entry date slider: instant cheap preview while dragging (no chart redraw,
   // no backtest re-run), one full recompute when you let go.
@@ -3601,32 +3540,9 @@ function wireEvents(){
   });
 
   document.querySelectorAll('#timeframeGroup .pill').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const tf = btn.dataset.tf;
-      if (tf === state.timeframe) return;
-      document.querySelectorAll('#timeframeGroup .pill').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      state.timeframe = tf;
-      DATA_URL = TF_URLS[tf];
-      $('statusLine').innerHTML = '<span class="spinner"></span> fetching '+TF_LABELS[tf].toLowerCase()+' series';
-      try{
-        await loadData();
-        if (RAW.dates.length){
-          $('inStartDate').value = RAW.dates[0].slice(0,10);
-          $('inStartDate').min = RAW.dates[0].slice(0,10);
-          $('inStartDate').max = RAW.dates[RAW.dates.length-1].slice(0,10);
-        }
-        initEntrySlider();
-        recompute();
-        if (charts.price){ charts.price.resetZoom(); syncPanSlider(); }
-        if (state.activeTab === 'analysis') renderAnalysisTab();
-      }catch(err){
-        $('statusLine').innerHTML = '<span style="color:var(--red)">●</span> failed to load '+TF_LABELS[tf].toLowerCase()+' dataset';
-        $('dataRangeLabel').textContent = 'DATA FETCH ERROR — '+err.message;
-        console.error(err);
-      }
-    });
+    btn.addEventListener('click',()=>{if(btn.dataset.tf!==state.timeframe||DATA_PENDING)changeTimeframe(btn.dataset.tf);});
   });
+  $('refreshDataBtn').addEventListener('click',()=>changeTimeframe(state.timeframe,true));
 
   document.querySelectorAll('#priceRangeGroup .pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3722,24 +3638,18 @@ function wireEvents(){
    ENTRY DATE SIMULATOR
 ====================================================================== */
 function initEntrySlider(){
-  if (!RAW.dates.length) return;
-  const slider = $('inStartSlider');
-  slider.max = RAW.dates.length - 1;
-  // keep current inStartDate selection if it maps to a valid index, else default to earliest
-  const wanted = $('inStartDate').value;
-  let idx = RAW.dates.findIndex(d => d >= wanted);
-  if (idx < 0) idx = 0;
-  slider.value = idx;
-  applySliderIndex(idx, {fromSlider:false});
+  if(!RAW.dates.length)return;
+  const slider=$('inStartSlider');slider.max=RAW.dates.length-1;
+  const wanted=state.startTimestamp||$('inStartDate').value||RAW.dates[0];
+  const idx=lowerBound(RAW.dates,wanted);slider.value=Math.min(idx,RAW.dates.length-1);
+  // Keep an out-of-range request intact so validation can explain it.
+  if(idx<RAW.dates.length)applySliderIndex(idx,{fromSlider:false});
 }
-
-function applySliderIndex(idx, opts){
-  opts = opts || {};
-  idx = Math.max(0, Math.min(RAW.dates.length-1, idx));
-  const dateStr = RAW.dates[idx];
-  $('entryDateLabel').textContent = 'ENTRY: ' + fmtDate(dateStr);
-  $('inStartDate').value = dateStr.slice(0,10);
-  if (opts.fromSlider !== false) $('inStartSlider').value = idx;
+function applySliderIndex(idx,opts={}){
+  idx=Math.max(0,Math.min(RAW.dates.length-1,Math.round(idx)));
+  const date=RAW.dates[idx];state.startTimestamp=date;
+  $('entryDateLabel').textContent='ENTRY: '+fmtDate(date);$('inStartDate').value=date.slice(0,10);
+  if(opts.fromSlider!==false)$('inStartSlider').value=idx;
 }
 
 function updateEntryReadout(){
@@ -3759,7 +3669,7 @@ function updateEntryReadout(){
   const changeEl = $('entryChange');
   changeEl.textContent = fmtSignedPct(changePct);
   changeEl.className = 'ticker-val num ' + (changePct>=0 ? 'green' : 'red');
-  $('entryDaysHeld').textContent = days.toLocaleString('en-US');
+  $('entryDaysHeld').textContent = fmtDays(days);
 
   const ef = emaFast[startIndex], es = emaSlow[startIndex];
   const stateEl = $('entryEmaState');
@@ -3772,65 +3682,17 @@ function updateEntryReadout(){
    SNAPSHOT EXPORT
 ====================================================================== */
 function drawSnapshotSparkline(canvas){
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  if (!lastResult) return;
-  const { bt, bh, startIndex } = lastResult;
-  const strat = bt.equity.slice(startIndex);
-  const hold = bh.eq.slice(startIndex);
-  const n = strat.length;
-  if (n < 2) return;
-
-  const posVals = strat.concat(hold).filter(v=>v!=null && isFinite(v) && v>0);
-  if (!posVals.length) return;
-  const logVals = posVals.map(Math.log);
-  const minV = Math.min(...logVals), maxV = Math.max(...logVals);
-  const padTop = 10, padBottom = 10;
-  const plotH = H - padTop - padBottom;
-  const toY = (v)=>{
-    if (v==null || !isFinite(v) || v<=0) return null;
-    const lv = Math.log(v);
-    const t = maxV>minV ? (lv-minV)/(maxV-minV) : 0.5;
-    return padTop + (1-t)*plotH;
-  };
-  const toX = (i)=> (i/(n-1)) * W;
-
-  // filled area under strategy curve
-  ctx.beginPath();
-  let started = false, lastX = 0;
-  strat.forEach((v,i)=>{
-    const y = toY(v);
-    if (y==null) return;
-    const x = toX(i);
-    if (!started){ ctx.moveTo(x,y); started = true; } else { ctx.lineTo(x,y); }
-    lastX = x;
-  });
-  if (started){
-    ctx.lineTo(lastX, H); ctx.lineTo(0, H); ctx.closePath();
-    const grad = ctx.createLinearGradient(0,0,0,H);
-    grad.addColorStop(0, 'rgba(38,208,124,.22)');
-    grad.addColorStop(1, 'rgba(38,208,124,0)');
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
-
-  function drawLine(data, color, width, dash){
-    ctx.beginPath();
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash||[]);
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    let s = false;
-    data.forEach((v,i)=>{
-      const y = toY(v);
-      if (y==null) return;
-      const x = toX(i);
-      if (!s){ ctx.moveTo(x,y); s = true; } else { ctx.lineTo(x,y); }
-    });
-    if (s) ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  drawLine(hold, '#5b6472', 2.5, [6,5]);
-  drawLine(strat, '#26d07c', 3.5);
+  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);if(!lastResult)return;
+  const {bt,bh,startIndex}=lastResult,strat=bt.equity.slice(startIndex),hold=bh.eq.slice(startIndex),n=strat.length;if(n<2)return;
+  const values=strat.concat(hold).filter(Number.isFinite);if(!values.length)return;
+  const log=values.every(v=>v>0),transformed=values.map(v=>log?Math.log(v):v),minV=finiteMin(transformed),maxV=finiteMax(transformed);
+  const toY=v=>Number.isFinite(v)?10+(1-(maxV>minV?((log?Math.log(v):v)-minV)/(maxV-minV):.5))*(H-20):null;
+  const toX=i=>i/(n-1)*W;
+  ctx.beginPath();let started=false,lastX=0;
+  strat.forEach((v,i)=>{const y=toY(v);if(y==null)return;const x=toX(i);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);lastX=x;});
+  if(started){ctx.lineTo(lastX,H);ctx.lineTo(0,H);ctx.closePath();const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,'rgba(38,208,124,.22)');grad.addColorStop(1,'rgba(38,208,124,0)');ctx.fillStyle=grad;ctx.fill();}
+  function line(data,color,width,dash){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash||[]);ctx.lineJoin='round';ctx.lineCap='round';let open=false;data.forEach((v,i)=>{const y=toY(v);if(y==null){open=false;return;}if(open)ctx.lineTo(toX(i),y);else{ctx.moveTo(toX(i),y);open=true;}});ctx.stroke();ctx.setLineDash([]);}
+  line(hold,'#5b6472',2.5,[6,5]);line(strat,'#26d07c',3.5);
 }
 
 function populateSnapshot(){
@@ -3840,7 +3702,7 @@ function populateSnapshot(){
 
   $('snapRange').textContent = fmtDate(RAW.dates[startIndex]) + ' → ' + fmtDate(RAW.dates[n]);
   $('snapMode').textContent = modeLabel + ' · ' + (TF_LABELS[state.timeframe] || 'DAILY');
-  $('snapDate').textContent = 'GENERATED ' + new Date().toLocaleString('en-US', {year:'numeric', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  $('snapDate').textContent = 'GENERATED ' + new Date().toLocaleString('en-US', {timeZone:'UTC',year:'numeric', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
 
   const cells = [
     ['FINAL EQUITY', fmtUSDFull(m.finalEquity), 'buy & hold: ' + fmtUSDFull(h.finalEquity), m.finalEquity >= cfg.initialCapital],
@@ -3849,7 +3711,7 @@ function populateSnapshot(){
     ['PROFIT FACTOR', m.profitFactor === Infinity ? '∞' : (m.profitFactor != null ? m.profitFactor.toFixed(2) : '—'), 'gross profit / gross loss', m.profitFactor == null ? null : m.profitFactor >= 1],
     ['MAX DRAWDOWN', fmtPct(m.maxDrawdown), 'buy & hold: ' + fmtPct(h.maxDrawdown), false],
     ['TRUE DRAWDOWN', fmtPct(m.trueDrawdown), 'as of last bar', m.trueDrawdown >= -0.0001],
-    ['TOTAL TRADES', String(m.totalTrades), m.tradesPerYear.toFixed(1) + ' / yr', null],
+    ['TOTAL TRADES', String(m.totalTrades), (Number.isFinite(m.tradesPerYear)?m.tradesPerYear.toFixed(1):'—') + ' / yr', null],
     ['AVG PROFIT / TRADE', fmtSignedPct(m.avgProfit), 'mean return, all trades', m.avgProfit >= 0]
   ];
   $('snapMetricGrid').innerHTML = cells.map(([label, val, sub, pos])=>{
@@ -3861,6 +3723,10 @@ function populateSnapshot(){
       + '</div>';
   }).join('');
 
+  const publicCfg=Object.fromEntries(Object.entries(cfg).filter(([k])=>k!=='atrSeries'&&k!=='volSeries'));
+  const specification={engine:ENGINE_VERSION,config:publicCfg,actualStart:RAW.dates[startIndex],end:RAW.dates[n],prices:DATA_META,mvrv:MVRV_META};
+  $('snapshotCard').dataset.runSpec=JSON.stringify(specification);
+  $('snapSettings').textContent='Engine '+ENGINE_VERSION+' · next-close fills · capital '+fmtUSDFull(cfg.initialCapital)+' · EMA '+cfg.emaFast+'/'+cfg.emaSlow+' bars · budget '+fmtPct(cfg.sizingPct)+' (100% cap) · fee '+fmtPct(cfg.feePct)+' / fill · slippage '+fmtPct(cfg.slippagePct)+' / fill · short carry '+fmtPct(cfg.shortCarryRate)+'/yr · risk-free '+fmtPct(cfg.riskFreeRate)+'/yr · Sortino target '+fmtPct(cfg.downsideTarget)+'/yr · MVRV '+cfg.mvrv.mode+' L '+cfg.mvrv.longReduce+'/'+cfg.mvrv.longExit+' S '+cfg.mvrv.shortReduce+'/'+cfg.mvrv.shortExit+' lag '+cfg.mvrv.lagDays+'d / max age '+cfg.mvrv.maxAgeDays+'d · stop '+(cfg.atrStop.enabled?cfg.atrStop.mult+'× close proxy':'off')+' · daily-vol sizing '+(cfg.volSizing.enabled?fmtPct(cfg.volSizing.targetPct):'off')+' · prices '+(DATA_META?.hash||'unavailable')+' · MVRV '+(MVRV_META?.hash||'unavailable');
   drawSnapshotSparkline($('snapChart'));
 }
 
@@ -3897,20 +3763,8 @@ async function exportSnapshot(){
 ====================================================================== */
 async function boot(){
   wireEvents();
-  try{
-    await loadData();
-    if (RAW.dates.length){
-      $('inStartDate').value = RAW.dates[0].slice(0,10);
-      $('inStartDate').min = RAW.dates[0].slice(0,10);
-      $('inStartDate').max = RAW.dates[RAW.dates.length-1].slice(0,10);
-    }
-    initEntrySlider();
-    recompute();
-  }catch(err){
-    $('statusLine').innerHTML = '<span style="color:var(--red)">●</span> failed to load dataset';
-    $('dataRangeLabel').textContent = 'DATA FETCH ERROR — '+err.message;
-    console.error(err);
-  }
+  if(typeof Chart==='undefined'){showRunIssue('The chart library could not load. Check the connection and reload this file.');return;}
+  await changeTimeframe(state.timeframe,true);
 }
 boot();
 
@@ -3945,24 +3799,11 @@ boot();
   });
 
   function activateSecretPreset(){
-    // MVRV REGIME FILTER -> Gate (thresholds stay default)
-    const gateBtn = document.querySelector('.tab-btn[data-mvrvmode="gate"]');
-    if (gateBtn && !gateBtn.classList.contains('active')) gateBtn.click();
-
-    // RISK MANAGEMENT / Vol-Targeted Sizing -> On (target % stays default)
-    const volOnBtn = document.querySelector('.tab-btn[data-volmode="on"]');
-    if (volOnBtn && !volOnBtn.classList.contains('active')) volOnBtn.click();
-
-    // ENTRY DATE SIMULATOR -> Dec 16 2021, 12:00 AM
-    if (RAW.dates && RAW.dates.length){
-      const target = '2021-12-16';
-      let idx = RAW.dates.findIndex(d => d >= target);
-      if (idx < 0) idx = RAW.dates.length - 1;
-      applySliderIndex(idx);
-      recompute();
-    }
-
-    showWelcomeBackPopup();
+    state.mvrvMode='gate';state.volSizingMode='on';
+    document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(b=>b.classList.toggle('active',b.dataset.mvrvmode==='gate'));
+    document.querySelectorAll('.tab-btn[data-volmode]').forEach(b=>b.classList.toggle('active',b.dataset.volmode==='on'));
+    state.startTimestamp='2021-12-16';$('inStartDate').value='2021-12-16';
+    if(recompute())showWelcomeBackPopup();
   }
 
   function showWelcomeBackPopup(){
