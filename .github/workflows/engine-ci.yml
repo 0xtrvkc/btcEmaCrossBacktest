@@ -1,0 +1,25 @@
+name: Engine CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-engine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run engine contract tests
+        run: node --test tests/*.test.mjs
