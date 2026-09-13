@@ -208,10 +208,26 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
 .data-quality-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .manifest-hash{font-size:10px;word-break:break-all;line-height:1.5;}
 .validation-stale{color:var(--amber)!important;}
+.controls-grid.delta-controls{grid-template-columns:repeat(4,1fr);}
+.delta-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0;}
+.delta-card{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:14px;min-width:0;}
+.delta-card.call{border-top-color:var(--green);}
+.delta-card.put{border-top-color:var(--red);}
+.delta-card-label{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.55px;text-transform:uppercase;color:var(--text-faint);}
+.delta-card-value{font-family:var(--mono);font-size:20px;font-weight:800;margin-top:7px;overflow-wrap:anywhere;}
+.delta-card-sub{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);line-height:1.5;margin-top:5px;}
+.delta-path{padding:10px 12px;border:1px dashed var(--border-strong);border-radius:8px;background:var(--bg-elevated);font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--text-dim);overflow-wrap:anywhere;}
+.delta-pair{font-weight:800;letter-spacing:.15px;}
+.delta-pair.call{color:var(--green);}
+.delta-pair.put{color:var(--red);}
+.delta-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;margin-bottom:10px;}
+.delta-history-title{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.55px;text-transform:uppercase;color:var(--text-dim);}
 @media(max-width:900px){
   .validation-summary{grid-template-columns:repeat(2,1fr);}
   .data-quality-grid{grid-template-columns:repeat(2,1fr);}
   .validation-controls{grid-template-columns:repeat(2,1fr);}
+  .delta-summary{grid-template-columns:repeat(2,1fr);}
+  .controls-grid.delta-controls{grid-template-columns:repeat(2,1fr);}
 }
 @media(max-width:640px){
   .validation-summary,.data-quality-grid{grid-template-columns:1fr;}
@@ -385,6 +401,7 @@ tr:hover td{background:var(--surface-2);}
   .controls-grid{grid-template-columns:1fr 1fr;}
   .hvt-grid{grid-template-columns:1fr;}
   .ticker-cell{min-width:100%;}
+  .delta-summary{grid-template-columns:1fr;}
 }
 
 /* ============================= CP77 SECRET POPUP ============================= */
@@ -595,7 +612,7 @@ tr:hover td{background:var(--surface-2);}
     <div class="controls-grid" style="margin-top:14px;">
       <div class="field"><label>Slippage / Fill <span class="info-icon" title="Adverse price adjustment on every entry and exit. This is a scenario assumption, not historical spread data.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inSlippage" value="0.05" min="0" max="5" step="0.01"></div></div>
       <div class="field"><label>Short Carry / Year <span class="info-icon" title="Annual cost on short notional, integrated over elapsed time. Zero excludes funding/borrow cost; this does not reproduce an exchange funding history.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inShortCarry" value="0" min="0" max="100" step="0.1"></div></div>
-      <div class="field"><label>Risk-free Rate / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inRiskFree" value="0" min="-99" max="100" step="0.1"></div></div>
+      <div class="field"><label>Risk-free Rate / Year <span class="info-icon" title="Annual rate used as the Sharpe benchmark and as the continuously compounded rate in the option-delta model. Uninvested strategy cash still earns 0%.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inRiskFree" value="0" min="-99" max="100" step="0.1"></div></div>
       <div class="field"><label>Sortino Target / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inDownsideTarget" value="0" min="-99" max="100" step="0.1"></div></div>
     </div>
   </div>
@@ -709,6 +726,86 @@ tr:hover td{background:var(--surface-2);}
         <span class="ticker-label">EMA STATE AT ENTRY</span>
         <span class="ticker-val num" id="entryEmaState">—</span>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTIONS DELTA LAB ============ -->
+  <div class="panel" id="deltaLab">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" style="background:var(--cyan)"></span> OPTIONS Δ LAB · HISTORICAL CASES</div>
+      <div class="chart-tools">
+        <span class="mono" id="deltaStatus" style="font-size:10.5px;color:var(--cyan);font-weight:700;">USD SPOT Δ · MODEL ESTIMATE</span>
+      </div>
+    </div>
+    <div class="controls-grid delta-controls">
+      <div class="field">
+        <label>Strike vs Entry <span class="info-icon" title="Strike as a percentage of the BTC reference price on the option-open date. 100% is at the money; 90% is a lower strike; 110% is a higher strike.">i</span></label>
+        <div class="suffix-wrap"><span>%</span><input type="number" id="inDeltaStrikePct" value="100" min="25" max="300" step="1"></div>
+      </div>
+      <div class="field">
+        <label>DTE at Open <span class="info-icon" title="Calendar days to expiry when the modeled option opens. A historical checkpoint is the EMA exit/current date, capped at this option expiry.">i</span></label>
+        <div class="suffix-wrap"><span>days</span><input type="number" id="inDeltaDte" value="30" min="1" max="3650" step="1"></div>
+      </div>
+      <div class="field">
+        <label>Implied Volatility <span class="info-icon" title="One constant annualized IV assumption used at open and checkpoint. The repo has no historical option chain, so this is not an observed exchange IV.">i</span></label>
+        <div class="suffix-wrap"><span>%</span><input type="number" id="inDeltaIv" value="70" min="1" max="500" step="1"></div>
+      </div>
+      <div class="field">
+        <label>Option BTC Quantity <span class="info-icon" title="Fractional BTC-equivalent option quantity used only to scale the approximate USD change. Normalized delta itself is independent of this quantity.">i</span></label>
+        <div class="suffix-wrap"><span>BTC</span><input type="number" id="inDeltaQuantity" value="0.01" min="0.00000001" max="100000" step="0.01"></div>
+      </div>
+    </div>
+
+    <div class="delta-summary" aria-live="polite">
+      <div class="delta-card call">
+        <div class="delta-card-label">Long Call Δ · Open</div>
+        <div class="delta-card-value" id="deltaCallOpen">—</div>
+        <div class="delta-card-sub" id="deltaCallOpenSub">—</div>
+      </div>
+      <div class="delta-card put">
+        <div class="delta-card-label">Long Put Δ · Open</div>
+        <div class="delta-card-value" id="deltaPutOpen">—</div>
+        <div class="delta-card-sub" id="deltaPutOpenSub">—</div>
+      </div>
+      <div class="delta-card call">
+        <div class="delta-card-label">Long Call Δ · Checkpoint</div>
+        <div class="delta-card-value" id="deltaCallRef">—</div>
+        <div class="delta-card-sub" id="deltaCallRefSub">—</div>
+      </div>
+      <div class="delta-card put">
+        <div class="delta-card-label">Long Put Δ · Checkpoint</div>
+        <div class="delta-card-value" id="deltaPutRef">—</div>
+        <div class="delta-card-sub" id="deltaPutRefSub">—</div>
+      </div>
+    </div>
+
+    <div class="delta-path" id="deltaCasePath">Choose a valid entry date to calculate the option path.</div>
+    <div class="notes" id="deltaPositionNote" style="margin-top:10px;">—</div>
+
+    <div class="delta-history-head">
+      <div>
+        <div class="delta-history-title">EMA ENTRY CASES</div>
+        <div class="notes" id="deltaHistoryMeta">Each row applies the same option assumptions to a historical backtest entry.</div>
+      </div>
+      <button class="toggle-log" id="toggleDeltaHistoryBtn" type="button" aria-expanded="false" aria-controls="deltaHistoryWrap">Show historical Δ cases ▾</button>
+    </div>
+    <div id="deltaHistoryWrap" style="display:none;">
+      <div class="table-wrap">
+        <table style="min-width:1180px;">
+          <thead>
+            <tr>
+              <th>#</th><th>EMA Side</th><th>Option Open</th><th>BTC Ref</th><th>Strike</th><th>Checkpoint</th><th>BTC Ref</th><th>DTE Left</th><th>Call Δ Open → Ref</th><th>Put Δ Open → Ref</th><th>ΔUSD / +1% BTC at Open</th>
+            </tr>
+          </thead>
+          <tbody id="deltaHistoryBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="notes" style="margin-top:12px;">
+      <b>Meaning</b> — Δ estimates the option's USD-value change for a $1 move in BTC, per 1 BTC-equivalent option. Quantity scales it: <span class="mono">ΔUSD ≈ Δ × BTC quantity × BTC price change</span>.<br>
+      <b>Model</b> — European Black–Scholes USD spot delta with zero yield and the global risk-free input. Long call Δ ranges from 0 to +1; long put Δ from −1 to 0. Short-option signs reverse.<br>
+      <b>Checkpoint</b> — the EMA exit (or latest close for an open trade), capped at option expiry. If expiry arrives first, the row uses the BTC close at expiry and terminal delta.<br>
+      <b>Limits</b> — constant user-entered IV, no volatility surface/skew, no historical option premium, and no exchange-recorded Greek. This is a risk lens only; it does not add an option trade, leverage, or naked exposure to the backtest.
     </div>
   </div>
 
@@ -1022,7 +1119,7 @@ tr:hover td{background:var(--surface-2);}
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Side</th><th>Entry Date</th><th>Entry Px</th><th>Exit Date</th><th>Exit Px</th><th>Exit Reason</th><th>Hold (d)</th><th>Return</th><th>P&amp;L (USD)</th></tr>
+            <tr><th>#</th><th>Side</th><th>Entry Date</th><th>Entry Px</th><th>Option Δ @ Entry</th><th>Exit Date</th><th>Exit Px</th><th>Exit Reason</th><th>Hold (d)</th><th>Return</th><th>P&amp;L (USD)</th></tr>
           </thead>
           <tbody id="tradeLogBody"></tbody>
         </table>
@@ -1037,14 +1134,15 @@ tr:hover td{background:var(--surface-2);}
       <b>Data</b> — validated BTC/USD close observations for the selected timeframe. Use Refresh to fetch again; the page does not stream prices. Timestamp labels are normalized to UTC. Gaps are flagged, not fabricated.<br>
       <b>Signal and execution</b> — SMA-seeded EMA periods count observed bars. A completed-close signal fills at the next available close, with configurable adverse slippage and per-fill fees. Live-aligned defaults to 0.05% fee plus 0.05% slippage per fill; presets never hide their inputs. Signals on the last bar remain unfilled. Backtests start in cash and wait for a new crossover.<br>
       <b>MVRV</b> — observations retain their source timestamp and receive the configured calendar-day delay. Values older than the maximum age are unavailable. Gate blocks entries; Scale changes new-entry size only. Missing observations block new entries and queue an exit of an open position. Publication lag is an explicit research assumption.<br>
-      <b>Sizing</b> — all entry costs fit within the cash budget, capped at 100% after overlays. Uninvested cash earns 0%; the risk-free input is only a Sharpe benchmark. Volatility sizing uses sample standard deviation of 14 completed daily returns and waits for that estimate to become available.<br>
+      <b>Sizing</b> — all entry costs fit within the cash budget, capped at 100% after overlays. Uninvested cash earns 0%; the risk-free input is a Sharpe benchmark and option-model discount rate, not portfolio interest. Volatility sizing uses sample standard deviation of 14 completed daily returns and waits for that estimate to become available.<br>
+      <b>Options delta</b> — historical EMA entries are repriced as hypothetical European options using standard Black–Scholes USD spot delta, the entry-date BTC close, strike percentage, DTE, constant IV, and risk-free input. The reference is the EMA exit/latest close capped at expiry. These are modeled sensitivities, not observed Deribit Greeks or option returns.<br>
       <b>Shorts</b> — fixed BTC quantity with linear USD P&amp;L. Optional annual carry is integrated on prior-bar notional. This is not an exchange margin/liquidation simulation. If sampled portfolio value cannot cover closure, the model records a capital-exhaustion exit and stops trading; a price gap can leave a deficit.<br>
       <b>Stops</b> — the close-to-close Wilder proxy is not true OHLC ATR. The trailing stop only tightens, ignores a zero proxy, and queues a next-close exit. Intrabar stops cannot be reconstructed from close-only prices.<br>
       <b>Returns</b> — portfolio P&amp;L includes both fees and all modeled costs. Calendar returns link to the previous period-end or initial capital; partial periods are marked. Mean Full-Year Return excludes partial years. CAGR uses exact elapsed time and requires 30 days, except a total loss is shown explicitly.<br>
       <b>Risk statistics</b> — Sharpe uses sample SD (N−1) and the configured risk-free rate. Sortino uses all N returns in the downside denominator. Both use complete, consecutive UTC daily intervals and √365.25 scaling; partial/gapped daily returns are excluded. Square-root scaling does not correct serial dependence or establish significance.<br>
       <b>Drawdown</b> — main drawdown uses every loaded bar and starts at initial capital. Rolling max drawdown retains the worst ordered peak-to-trough decline inside each window. Episode durations start at the prior peak; averages use recovered episodes. Ulcer Index uses available UTC day-end equity.<br>
       <b>Filter impact</b> — the comparison disables only MVRV and retains all other settings, costs and dates. The buy-and-hold benchmark buys at the initial available close and remains open; neither open strategy positions nor buy-and-hold are charged a hypothetical final exit fee.<br>
-      <b>Reproducibility</b> — Run JSON records the versioned engine contract, public configuration, data-source hashes, metrics, costs, positions, and trades. Identical hashes identify identical fetched bytes.<br>
+      <b>Reproducibility</b> — Run JSON records the versioned engine contract, public configuration, data-source hashes, metrics, costs, positions, trades, delta assumptions, and every historical delta case. Identical hashes identify identical fetched bytes.<br>
       <b>Validation</b> — the Validation tab performs a chronological fixed-rule split, a common-window EMA neighborhood, and execution-cost stress. Historical parameter/start-date selection can still overfit; these diagnostics do not establish a predictive edge or statistical significance.
     </div>
   </div>
@@ -1338,6 +1436,7 @@ const fmtUSD = (v, dp=2) => {
   return v.toLocaleString('en-US',{minimumFractionDigits:dp,maximumFractionDigits:dp});
 };
 const fmtUSDFull = (v) => v==null||!isFinite(v) ? '—' : '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtSignedUSD = (v) => v==null||!isFinite(v) ? '—' : (v>=0?'+':'−')+'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtPct = (v, dp=2) => v==null||!isFinite(v) ? '—' : (v*100).toFixed(dp)+'%';
 const fmtSignedPct = (v, dp=2) => {
   if (v==null||!isFinite(v)) return '—';
@@ -1345,7 +1444,7 @@ const fmtSignedPct = (v, dp=2) => {
   return s+(v*100).toFixed(dp)+'%';
 };
 const fmtBTC = (v) => v==null||!isFinite(v) ? '—' : v.toLocaleString('en-US',{minimumFractionDigits:5,maximumFractionDigits:5})+' BTC';
-const ENGINE_VERSION = 'quant-3.0.0';
+const ENGINE_VERSION = 'quant-3.1.0';
 const DAY_MS = 86400000;
 const YEAR_DAYS = 365.25;
 const POLICY = Object.freeze({ minCagrDays:30, minRiskReturns:10, minRollingReturns:20, volDays:14, mvrvLagDays:1, mvrvMaxAgeDays:3 });
@@ -1382,6 +1481,31 @@ function lowerBound(dates, target){
   return lo;
 }
 function tradeOutcome(trade){ const tolerance=Math.max(1e-8,Math.abs(trade.entryAmount||0)*1e-10); return trade.pnlDollar>tolerance?1:trade.pnlDollar < -tolerance?-1:0; }
+
+function normalCdf(x){
+  if(x===Infinity)return 1;if(x===-Infinity)return 0;
+  if(!Number.isFinite(x))throw new Error('Normal CDF input must be finite.');
+  const sign=x<0?-1:1,z=Math.abs(x)/Math.sqrt(2),t=1/(1+.3275911*z);
+  const erf=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-z*z);
+  return Math.min(1,Math.max(0,.5*(1+sign*erf)));
+}
+function blackScholesDelta(spot,strike,daysToExpiry,annualVol,riskFreeRate=0){
+  for(const [label,value] of [['Spot',spot],['Strike',strike],['Days to expiry',daysToExpiry],['Annual volatility',annualVol],['Risk-free rate',riskFreeRate]])if(!Number.isFinite(value))throw new Error(label+' must be finite.');
+  if(spot<=0||strike<=0)throw new Error('Spot and strike must be positive.');
+  if(daysToExpiry<0)throw new Error('Days to expiry cannot be negative.');
+  if(annualVol<0)throw new Error('Annual volatility cannot be negative.');
+  if(daysToExpiry===0||annualVol===0){
+    const threshold=strike*Math.exp(-riskFreeRate*daysToExpiry/YEAR_DAYS),call=spot>threshold?1:spot<threshold?0:.5;
+    return {call,put:call-1,d1:call===1?Infinity:call===0?-Infinity:0};
+  }
+  const years=daysToExpiry/YEAR_DAYS,sigmaRoot=annualVol*Math.sqrt(years),d1=(Math.log(spot/strike)+(riskFreeRate+.5*annualVol*annualVol)*years)/sigmaRoot,call=normalCdf(d1);
+  return {call,put:call-1,d1};
+}
+function deltaUsdChange(delta,btcQuantity,spotMoveUsd){
+  if(![delta,btcQuantity,spotMoveUsd].every(Number.isFinite))throw new Error('Delta sensitivity inputs must be finite.');
+  return delta*btcQuantity*spotMoveUsd;
+}
+const fmtDelta=v=>v==null||!Number.isFinite(v)?'—':(v>=0?'+':'')+v.toFixed(3);
 
 
 function themeVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
@@ -2071,6 +2195,54 @@ function readConfig(){
   if(cfg.mvrv.maxAgeDays<cfg.mvrv.lagDays)throw new Error('MVRV maximum age must be at least the calendar-day lag.');
   return cfg;
 }
+function readDeltaConfig(){
+  return {
+    strikePct:inputNumber('inDeltaStrikePct','Delta strike percentage',25,300)/100,
+    dteDays:inputNumber('inDeltaDte','Delta days to expiry',1,3650,true),
+    annualVol:inputNumber('inDeltaIv','Delta implied volatility',1,500)/100,
+    btcQuantity:inputNumber('inDeltaQuantity','Option BTC quantity',.00000001,100000),
+    riskFreeRate:inputNumber('inRiskFree','Risk-free rate (%)',-99,100)/100
+  };
+}
+function indexAtOrBefore(dates,targetMs){
+  if(!dates.length)return -1;
+  let index=lowerBound(dates,targetMs);
+  if(index>=dates.length)return dates.length-1;
+  if(parseTs(dates[index]).getTime()>targetMs)index--;
+  return Math.max(0,index);
+}
+function optionDeltaSnapshot({entryDate,entrySpot,referenceDate,referenceSpot,strikePct,dteDays,annualVol,riskFreeRate=0,btcQuantity=1,remainingDays=null}){
+  if(!entryDate||!referenceDate)throw new Error('Delta snapshot needs entry and reference dates.');
+  if(parseTs(referenceDate)<parseTs(entryDate))throw new Error('Delta reference cannot precede the option open.');
+  const strike=entrySpot*strikePct,elapsedDays=daysBetween(entryDate,referenceDate),daysLeft=remainingDays==null?Math.max(0,dteDays-elapsedDays):Math.max(0,remainingDays);
+  const open=blackScholesDelta(entrySpot,strike,dteDays,annualVol,riskFreeRate),reference=blackScholesDelta(referenceSpot,strike,daysLeft,annualVol,riskFreeRate);
+  return {
+    entryDate,entrySpot,referenceDate,referenceSpot,strike,dteDays,daysLeft,elapsedDays,annualVol,riskFreeRate,btcQuantity,
+    open,reference,
+    usdForOnePctAtOpen:{call:deltaUsdChange(open.call,btcQuantity,entrySpot*.01),put:deltaUsdChange(open.put,btcQuantity,entrySpot*.01)},
+    usdForOnePctAtReference:{call:deltaUsdChange(reference.call,btcQuantity,referenceSpot*.01),put:deltaUsdChange(reference.put,btcQuantity,referenceSpot*.01)}
+  };
+}
+function buildHistoricalDeltaCase(entryDate,terminalDate,deltaCfg,metadata={}){
+  if(!RAW.dates.length)throw new Error('Price data is unavailable for delta history.');
+  const entryIndex=Math.min(lowerBound(RAW.dates,entryDate),RAW.dates.length-1),actualEntryDate=RAW.dates[entryIndex],entryMs=parseTs(actualEntryDate).getTime();
+  const terminalMs=Math.min(parseTs(terminalDate).getTime(),parseTs(RAW.dates.at(-1)).getTime()),expiryMs=entryMs+deltaCfg.dteDays*DAY_MS,atExpiry=expiryMs<=terminalMs,targetMs=Math.min(terminalMs,expiryMs),referenceIndex=indexAtOrBefore(RAW.dates,targetMs);
+  if(referenceIndex<entryIndex)throw new Error('No historical price reference exists after the option open.');
+  const referenceDate=RAW.dates[referenceIndex],remainingDays=atExpiry?0:Math.max(0,(expiryMs-parseTs(referenceDate).getTime())/DAY_MS);
+  return {
+    ...metadata,
+    checkpoint:atExpiry?'expiry':metadata.open?'latest':'ema_exit',
+    expiryDate:new Date(expiryMs).toISOString(),
+    ...optionDeltaSnapshot({entryDate:actualEntryDate,entrySpot:RAW.prices[entryIndex],referenceDate,referenceSpot:RAW.prices[referenceIndex],...deltaCfg,remainingDays})
+  };
+}
+function collectHistoricalDeltaCases(deltaCfg){
+  if(!lastResult)return [];
+  const cases=lastResult.bt.trades.map((trade,index)=>buildHistoricalDeltaCase(trade.entryDate,trade.exitDate,deltaCfg,{number:index+1,side:trade.side,open:false}));
+  const position=lastResult.bt.openPosition;
+  if(position)cases.push(buildHistoricalDeltaCase(position.date,RAW.dates.at(-1),deltaCfg,{number:'OPEN',side:position.side,open:true}));
+  return cases;
+}
 function syncExecutionPresetUI(){
   document.querySelectorAll('[data-execution-preset]').forEach(btn=>btn.classList.toggle('active',btn.dataset.executionPreset===state.executionPreset));
 }
@@ -2160,6 +2332,7 @@ function livePreview(idx){
   if (ef==null || es==null){ stateEl.textContent = 'WARMING UP'; stateEl.style.color = 'var(--text-faint)'; }
   else if (ef > es){ stateEl.textContent = 'BULLISH'; stateEl.style.color = 'var(--green)'; }
   else { stateEl.textContent = 'BEARISH'; stateEl.style.color = 'var(--red)'; }
+  renderSelectedDeltaCase(idx);
 
   // Cheap marker + guide line: position CSS elements using the chart's already-computed
   // pixel scales -- no dataset mutation, no chart.update(), no canvas redraw.
@@ -3764,15 +3937,22 @@ function renderHoldVsTrade(){
 ====================================================================== */
 const EXIT_REASON_LABEL = { signal:'EMA Cross', mvrv:'MVRV Filter', atrStop:'ATR Stop', data:'MVRV unavailable', insolvent:'Capital exhausted' };
 const EXIT_REASON_COLOR = { signal:'var(--text-dim)', mvrv:'var(--violet)', atrStop:'var(--amber)', data:'var(--amber)', insolvent:'var(--red)' };
+function tradeEntryDeltaHtml(entryDate,deltaCfg){
+  if(!deltaCfg||!RAW.dates.length)return '—';
+  const index=Math.min(lowerBound(RAW.dates,entryDate),RAW.dates.length-1),spot=RAW.prices[index],strike=spot*deltaCfg.strikePct,delta=blackScholesDelta(spot,strike,deltaCfg.dteDays,deltaCfg.annualVol,deltaCfg.riskFreeRate);
+  const title='Modeled at BTC reference $'+fmtUSD(spot)+', strike $'+fmtUSD(strike)+', '+deltaCfg.dteDays+' DTE, '+fmtPct(deltaCfg.annualVol,0)+' IV';
+  return '<span title="'+escAttr(title)+'"><span class="delta-pair call">C '+fmtDelta(delta.call)+'</span> · <span class="delta-pair put">P '+fmtDelta(delta.put)+'</span></span>';
+}
 function renderTradeLog(){
   if(!lastResult)return;
   const {bt}=lastResult;
+  let deltaCfg=null;try{deltaCfg=readDeltaConfig();}catch(_error){}
   const rows=bt.trades.map((t,i)=>{
     const outcome=tradeOutcome(t),color=outcome>0?'var(--green)':outcome<0?'var(--red)':'var(--text-dim)';
-    return '<tr><td>'+(i+1)+'</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.entryDate))+'</td><td>$'+fmtUSD(t.entryPrice)+'</td><td>'+escAttr(fmtDate(t.exitDate))+'</td><td>$'+fmtUSD(t.exitPrice)+'</td><td style="color:'+(EXIT_REASON_COLOR[t.exitReason]||'var(--text-dim)')+'">'+escAttr(EXIT_REASON_LABEL[t.exitReason]||t.exitReason)+'</td><td>'+fmtDays(t.holdDays)+'</td><td style="color:'+color+'">'+fmtSignedPct(t.pnlPct)+'</td><td style="color:'+color+'" title="Entry fee '+fmtUSDFull(t.entryFee)+'; exit fee '+fmtUSDFull(t.exitFee)+'; carry '+fmtUSDFull(t.carry)+'">'+(t.pnlDollar>=0?'+':'')+fmtUSD(t.pnlDollar)+'</td></tr>';
+    return '<tr><td>'+(i+1)+'</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.entryDate))+'</td><td>$'+fmtUSD(t.entryPrice)+'</td><td>'+tradeEntryDeltaHtml(t.entryDate,deltaCfg)+'</td><td>'+escAttr(fmtDate(t.exitDate))+'</td><td>$'+fmtUSD(t.exitPrice)+'</td><td style="color:'+(EXIT_REASON_COLOR[t.exitReason]||'var(--text-dim)')+'">'+escAttr(EXIT_REASON_LABEL[t.exitReason]||t.exitReason)+'</td><td>'+fmtDays(t.holdDays)+'</td><td style="color:'+color+'">'+fmtSignedPct(t.pnlPct)+'</td><td style="color:'+color+'" title="Entry fee '+fmtUSDFull(t.entryFee)+'; exit fee '+fmtUSDFull(t.exitFee)+'; carry '+fmtUSDFull(t.carry)+'">'+(t.pnlDollar>=0?'+':'')+fmtUSD(t.pnlDollar)+'</td></tr>';
   }).reverse();
-  if(bt.openPosition){const t=bt.openPosition;rows.unshift('<tr><td>OPEN</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.date))+'</td><td>$'+fmtUSD(t.price)+'</td><td colspan="3">Mark-to-market · '+t.quantity.toFixed(8)+' BTC</td><td>'+fmtDays(daysBetween(t.date,RAW.dates.at(-1)))+'</td><td>'+fmtSignedPct(t.unrealizedPnl/t.amount)+'</td><td>'+fmtUSDFull(t.unrealizedPnl)+'</td></tr>');}
-  $('tradeLogBody').innerHTML=rows.join('')||'<tr><td colspan="10" style="text-align:center;padding:20px">No trades in this configuration.</td></tr>';
+  if(bt.openPosition){const t=bt.openPosition;rows.unshift('<tr><td>OPEN</td><td><span class="side-tag '+t.side+'">'+t.side.toUpperCase()+'</span></td><td>'+escAttr(fmtDate(t.date))+'</td><td>$'+fmtUSD(t.price)+'</td><td>'+tradeEntryDeltaHtml(t.date,deltaCfg)+'</td><td colspan="3">Mark-to-market · '+t.quantity.toFixed(8)+' BTC</td><td>'+fmtDays(daysBetween(t.date,RAW.dates.at(-1)))+'</td><td>'+fmtSignedPct(t.unrealizedPnl/t.amount)+'</td><td>'+fmtUSDFull(t.unrealizedPnl)+'</td></tr>');}
+  $('tradeLogBody').innerHTML=rows.join('')||'<tr><td colspan="11" style="text-align:center;padding:20px">No trades in this configuration.</td></tr>';
 }
 
 
@@ -3831,6 +4011,10 @@ function wireEvents(){
 
   ['inValidationSplit','inSensitivityPct','inCostStress'].forEach(id=>$(id).addEventListener('input',()=>markValidationStale('Validation settings changed.')));
   $('runValidationBtn').addEventListener('click',runValidationSuite);
+
+  ['inDeltaStrikePct','inDeltaDte','inDeltaIv','inDeltaQuantity'].forEach(id=>{
+    let timer;$(id).addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{renderDeltaViews(Number($('inStartSlider').value));renderTradeLog();},120);});
+  });
 
   // Rolling return window: doesn't touch the backtest itself, so just recompute
   // the rolling series off the already-computed equity curves and redraw the chart.
@@ -3956,6 +4140,12 @@ function wireEvents(){
     wrap.style.display = open ? 'none' : 'block';
     $('toggleLogBtn').textContent = open ? 'Show trades ▾' : 'Hide trades ▴';
   });
+  $('toggleDeltaHistoryBtn').addEventListener('click', ()=>{
+    const wrap=$('deltaHistoryWrap'),open=wrap.style.display!=='none';
+    wrap.style.display=open?'none':'block';
+    $('toggleDeltaHistoryBtn').textContent=open?'Show historical Δ cases ▾':'Hide historical Δ cases ▴';
+    $('toggleDeltaHistoryBtn').setAttribute('aria-expanded',String(!open));
+  });
 
   $('exportSnapBtn').addEventListener('click', exportSnapshot);
   $('exportRunBtn').addEventListener('click',exportRunManifest);
@@ -3997,6 +4187,47 @@ function applySliderIndex(idx,opts={}){
   if(opts.fromSlider!==false)$('inStartSlider').value=idx;
 }
 
+function deltaCheckpointLabel(deltaCase){
+  return deltaCase.checkpoint==='expiry'?'OPTION EXPIRY':deltaCase.checkpoint==='ema_exit'?'EMA EXIT':'LATEST CLOSE';
+}
+function setDeltaCard(valueId,subId,delta,usdChange,quantity,daysLeft){
+  $(valueId).textContent=fmtDelta(delta);
+  $(subId).textContent='Position Δ '+fmtDelta(delta*quantity)+' BTC-eq · +1% BTC ≈ '+fmtSignedUSD(usdChange)+(daysLeft==null?'':' · '+fmtDays(daysLeft)+' DTE');
+}
+function renderSelectedDeltaCase(index,deltaCfg=null){
+  if(!RAW.dates.length)return null;
+  try{
+    const cfg=deltaCfg||readDeltaConfig(),entryIndex=Math.max(0,Math.min(RAW.dates.length-1,Math.round(index))),deltaCase=buildHistoricalDeltaCase(RAW.dates[entryIndex],RAW.dates.at(-1),cfg,{number:'SELECTED',side:'reference',open:true});
+    setDeltaCard('deltaCallOpen','deltaCallOpenSub',deltaCase.open.call,deltaCase.usdForOnePctAtOpen.call,cfg.btcQuantity,cfg.dteDays);
+    setDeltaCard('deltaPutOpen','deltaPutOpenSub',deltaCase.open.put,deltaCase.usdForOnePctAtOpen.put,cfg.btcQuantity,cfg.dteDays);
+    setDeltaCard('deltaCallRef','deltaCallRefSub',deltaCase.reference.call,deltaCase.usdForOnePctAtReference.call,cfg.btcQuantity,deltaCase.daysLeft);
+    setDeltaCard('deltaPutRef','deltaPutRefSub',deltaCase.reference.put,deltaCase.usdForOnePctAtReference.put,cfg.btcQuantity,deltaCase.daysLeft);
+    $('deltaCasePath').innerHTML='<b>SELECTED PATH</b> · '+escAttr(fmtDate(deltaCase.entryDate))+' at $'+fmtUSD(deltaCase.entrySpot)+' → '+deltaCheckpointLabel(deltaCase)+' '+escAttr(fmtDate(deltaCase.referenceDate))+' at $'+fmtUSD(deltaCase.referenceSpot)+' · strike $'+fmtUSD(deltaCase.strike)+' · expiry '+escAttr(fmtDate(deltaCase.expiryDate));
+    const coveredCall=cfg.btcQuantity*(1-deltaCase.open.call),protectivePut=cfg.btcQuantity*(1+deltaCase.open.put),cashSecuredPut=-cfg.btcQuantity*deltaCase.open.put;
+    $('deltaPositionNote').innerHTML='<b>Cash/covered reading at open</b> — matched covered call net Δ <span class="delta-pair call">'+fmtDelta(coveredCall)+'</span> BTC-eq · matched protective put net Δ <span class="delta-pair call">'+fmtDelta(protectivePut)+'</span> BTC-eq · cash-secured short put Δ <span class="delta-pair call">'+fmtDelta(cashSecuredPut)+'</span> BTC-eq. Short-option delta is the sign-reversed long-option delta.';
+    $('deltaStatus').textContent='USD SPOT Δ · '+Math.round(cfg.strikePct*100)+'% STRIKE · '+cfg.dteDays+'D · '+Math.round(cfg.annualVol*100)+'% IV';
+    $('deltaStatus').style.color='var(--cyan)';
+    return deltaCase;
+  }catch(error){
+    $('deltaStatus').textContent='DELTA UNAVAILABLE · '+error.message;$('deltaStatus').style.color='var(--red)';
+    for(const id of ['deltaCallOpen','deltaPutOpen','deltaCallRef','deltaPutRef'])$(id).textContent='—';
+    return null;
+  }
+}
+function renderDeltaHistory(deltaCfg){
+  const cases=collectHistoricalDeltaCases(deltaCfg),rows=cases.map(deltaCase=>{
+    const checkpoint=deltaCheckpointLabel(deltaCase),callUsd=fmtSignedUSD(deltaCase.usdForOnePctAtOpen.call),putUsd=fmtSignedUSD(deltaCase.usdForOnePctAtOpen.put);
+    return '<tr><td>'+deltaCase.number+'</td><td><span class="side-tag '+deltaCase.side+'">'+String(deltaCase.side).toUpperCase()+'</span></td><td>'+escAttr(fmtDate(deltaCase.entryDate))+'</td><td>$'+fmtUSD(deltaCase.entrySpot)+'</td><td>$'+fmtUSD(deltaCase.strike)+'</td><td title="'+checkpoint+'">'+checkpoint+' · '+escAttr(fmtDate(deltaCase.referenceDate))+'</td><td>$'+fmtUSD(deltaCase.referenceSpot)+'</td><td>'+fmtDays(deltaCase.daysLeft)+'</td><td><span class="delta-pair call">'+fmtDelta(deltaCase.open.call)+'</span> → <span class="delta-pair call">'+fmtDelta(deltaCase.reference.call)+'</span></td><td><span class="delta-pair put">'+fmtDelta(deltaCase.open.put)+'</span> → <span class="delta-pair put">'+fmtDelta(deltaCase.reference.put)+'</span></td><td><span class="delta-pair call">C '+callUsd+'</span> · <span class="delta-pair put">P '+putUsd+'</span></td></tr>';
+  }).reverse();
+  $('deltaHistoryBody').innerHTML=rows.join('')||'<tr><td colspan="11" style="text-align:center;padding:20px">No EMA entries in this configuration.</td></tr>';
+  $('deltaHistoryMeta').textContent=cases.length+' historical '+(cases.length===1?'case':'cases')+' · '+deltaCfg.btcQuantity+' BTC option quantity · strike '+Math.round(deltaCfg.strikePct*100)+'% of each entry reference · '+deltaCfg.dteDays+' DTE · '+fmtPct(deltaCfg.annualVol,0)+' constant IV';
+  return cases;
+}
+function renderDeltaViews(index=lastResult?.startIndex){
+  if(!lastResult||index==null)return;
+  try{const cfg=readDeltaConfig();renderSelectedDeltaCase(index,cfg);renderDeltaHistory(cfg);}catch(error){renderSelectedDeltaCase(index);$('deltaHistoryBody').innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px">'+escAttr(error.message)+'</td></tr>';}
+}
+
 function updateEntryReadout(){
   if (!lastResult) return;
   const { startIndex, emaFast, emaSlow } = lastResult;
@@ -4021,6 +4252,7 @@ function updateEntryReadout(){
   if (ef==null || es==null){ stateEl.textContent = 'WARMING UP'; stateEl.style.color = 'var(--text-faint)'; }
   else if (ef > es){ stateEl.textContent = 'BULLISH'; stateEl.style.color = 'var(--green)'; }
   else { stateEl.textContent = 'BEARISH'; stateEl.style.color = 'var(--red)'; }
+  renderDeltaViews(startIndex);
 }
 
 /* ======================================================================
@@ -4028,6 +4260,23 @@ function updateEntryReadout(){
 ====================================================================== */
 function scenarioManifest(run){
   return {period:{start:RAW.dates[run.startIndex],end:RAW.dates[run.endIndex]},metrics:metricSnapshot(run.metrics),buyAndHold:metricSnapshot(run.metricsHold),costs:{fees:run.bt.totalFees,shortCarry:run.bt.totalCarry}};
+}
+function deltaCaseManifest(deltaCase){
+  return {
+    case:deltaCase.number,emaSide:deltaCase.side,checkpoint:deltaCase.checkpoint,
+    optionOpen:{date:deltaCase.entryDate,btcReference:deltaCase.entrySpot,strike:deltaCase.strike,dteDays:deltaCase.dteDays,callDelta:deltaCase.open.call,putDelta:deltaCase.open.put},
+    reference:{date:deltaCase.referenceDate,btcReference:deltaCase.referenceSpot,daysToExpiry:deltaCase.daysLeft,callDelta:deltaCase.reference.call,putDelta:deltaCase.reference.put},
+    expiryDate:deltaCase.expiryDate,
+    usdSensitivityForOnePctBtcMove:{open:deltaCase.usdForOnePctAtOpen,reference:deltaCase.usdForOnePctAtReference}
+  };
+}
+function buildDeltaManifest(){
+  const config=readDeltaConfig(),selected=buildHistoricalDeltaCase(RAW.dates[lastResult.startIndex],RAW.dates.at(-1),config,{number:'SELECTED',side:'reference',open:true}),historicalCases=collectHistoricalDeltaCases(config);
+  return {
+    model:'Black-Scholes European USD spot delta',observedExchangeGreek:false,underlyingYield:0,
+    interpretation:'Approximate option USD-value change for a $1 BTC move per BTC-equivalent option; short-option signs reverse.',
+    assumptions:config,selectedEntry:deltaCaseManifest(selected),historicalCases:historicalCases.map(deltaCaseManifest)
+  };
 }
 function buildRunManifest(){
   if(!lastResult)throw new Error('Run a valid backtest before exporting.');
@@ -4044,13 +4293,14 @@ function buildRunManifest(){
     };
   }
   return {
-    schemaVersion:'btc-ema-backtest-run/v1',engineVersion:ENGINE_VERSION,generatedAt:new Date().toISOString(),
+    schemaVersion:'btc-ema-backtest-run/v2',engineVersion:ENGINE_VERSION,generatedAt:new Date().toISOString(),
     strategy:{name:'BTC EMA Cross',signal:'fast EMA crosses slow EMA',defaultRule:'EMA 50/200 on 4H',mode:cfg.mode},
     executionContract:{signalInput:'completed close',fill:'next available close',lastBarSignal:'unfilled',maxExposure:1,leverage:false,cashYield:0,openPositionFinalExit:false,benchmarkFinalExit:false},
     config:publicConfig(cfg),
     period:{requestedStart:cfg.startDate,actualStart:RAW.dates[startIndex],end:RAW.dates[endIndex],timeframe:cfg.timeframe,bars:RAW.dates.length-startIndex},
     data:{prices:{...DATA_META,observations:RAW.dates.length,first:RAW.dates[0],last:RAW.dates.at(-1)},mvrv:MVRV_META?{...MVRV_META,availableObservations:mvrvAvailable,eligibleObservations:eligible,coverage:eligible?mvrvAvailable/eligible:null}:null},
     results:{strategy:metricSnapshot(metrics),buyAndHold:metricSnapshot(metricsHold),emaOnlyBaseline:metricSnapshot(metricsBase),costs:{fees:bt.totalFees,shortCarry:bt.totalCarry,buyAndHoldEntryFee:bh.entryFee},openPosition:bt.openPosition,trades:bt.trades},
+    optionsDelta:buildDeltaManifest(),
     validation
   };
 }
@@ -4146,11 +4396,12 @@ async function boot(){
 }
 const engineTestHooks=globalThis.__BTC_EMA_TEST__?{
   setTestData(data){RAW={dates:Array.from(data.dates),prices:Array.from(data.prices),mvrv:Array.from(data.mvrv||new Array(data.dates.length).fill(null))};state.timeframe=data.timeframe||'1d';},
-  computeScenario,neighborhoodValues
+  computeScenario,neighborhoodValues,buildHistoricalDeltaCase
 }:{};
 globalThis.BtcEmaEngine=Object.freeze({
   version:ENGINE_VERSION,parseTs,computeEMA,computeEMAFrom,generateSignals,runBacktest,buyAndHoldEquity,
   computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,normalizePrices,normalizeMvrv,alignMvrv,
+  normalCdf,blackScholesDelta,deltaUsdChange,optionDeltaSnapshot,
   ...engineTestHooks
 });
 if(!globalThis.__BTC_EMA_TEST__)boot();

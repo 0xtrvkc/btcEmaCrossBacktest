@@ -33,7 +33,7 @@ function baseConfig(overrides={}){
 }
 
 test('engine contract is versioned',()=>{
-  assert.equal(engine.version,'quant-3.0.0');
+  assert.equal(engine.version,'quant-3.1.0');
 });
 
 test('literal DOM hooks exist once in the document',()=>{
@@ -102,6 +102,40 @@ test('drawdown starts from initial capital and tracks the running peak',()=>{
   const drawdown=engine.computeDrawdown(values,0,100);
   const expected=[0,0,-.25,-.1,0];
   Array.from(drawdown).forEach((value,index)=>assert.ok(Math.abs(value-expected[index])<1e-12));
+});
+
+test('Black-Scholes USD spot delta matches a known one-year ATM case',()=>{
+  const delta=engine.blackScholesDelta(100,100,365.25,.2,0);
+  assert.ok(Math.abs(delta.call-.53982784)<1e-6);
+  assert.ok(Math.abs(delta.put-(-.46017216))<1e-6);
+  assert.ok(Math.abs(delta.call-delta.put-1)<1e-12);
+});
+
+test('option delta uses explicit terminal values at expiry',()=>{
+  assert.deepEqual(JSON.parse(JSON.stringify(engine.blackScholesDelta(101,100,0,.7,0))),{call:1,put:0,d1:null});
+  assert.deepEqual(JSON.parse(JSON.stringify(engine.blackScholesDelta(99,100,0,.7,0))),{call:0,put:-1,d1:null});
+  const atm=engine.blackScholesDelta(100,100,0,.7,0);
+  assert.equal(atm.call,.5);
+  assert.equal(atm.put,-.5);
+});
+
+test('delta USD sensitivity scales fractional BTC quantity',()=>{
+  assert.equal(engine.deltaUsdChange(.5,.025,1000),12.5);
+  assert.equal(engine.deltaUsdChange(-.5,.025,1000),-12.5);
+});
+
+test('historical delta checkpoint is capped at option expiry',()=>{
+  const dates=['2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05'];
+  const prices=[100,110,90,120,80];
+  engine.setTestData({dates,prices,timeframe:'1d'});
+  const cfg={strikePct:1,dteDays:2,annualVol:.7,btcQuantity:.01,riskFreeRate:0};
+  const result=engine.buildHistoricalDeltaCase(dates[0],dates[4],cfg,{number:1,side:'long',open:false});
+  assert.equal(result.checkpoint,'expiry');
+  assert.equal(result.referenceDate,'2026-01-03');
+  assert.equal(result.referenceSpot,90);
+  assert.equal(result.daysLeft,0);
+  assert.equal(result.reference.call,0);
+  assert.equal(result.reference.put,-1);
 });
 
 test('validation scenarios use the requested fixed window and nearby periods',()=>{
