@@ -6,13 +6,14 @@ A client-side research terminal for Sirapob's core Bitcoin rule: EMA 50/200 on t
 
 The app runs entirely in the browser. It fetches public BTC close and MVRV data, validates the observations, calculates the strategy, and renders the report without sending portfolio settings to a server.
 
-## What changed in engine v3
+## What changed in engine v3.1
 
 The research workflow was strengthened using the parts of [QuantDinger](https://github.com/OpenByteInc/QuantDinger) that fit a focused static backtester:
 
 - explicit Exploration, Live-aligned, and Custom execution-cost presets;
 - a Validation tab with chronological holdout, EMA-neighborhood sensitivity, and execution-cost stress checks;
 - a versioned JSON run manifest containing settings, assumptions, results, trades, source URLs, and dataset hashes;
+- an Options Delta Lab that maps configurable call/put delta estimates to the selected entry date and every historical EMA entry;
 - deterministic engine tests and a Node.js 24 GitHub Actions workflow;
 - clearer separation between research assumptions and observed market data.
 
@@ -32,6 +33,10 @@ The app deliberately does not copy QuantDinger's broker execution, accounts, dat
 | Execution preset | Live-aligned |
 | Fee per fill | 0.05% |
 | Adverse slippage per fill | 0.05% |
+| Option delta strike | 100% of entry BTC reference |
+| Option delta maturity | 30 calendar days |
+| Option delta IV | 70% annualized, constant |
+| Option delta quantity | 0.01 BTC-equivalent |
 | Leverage | None; exposure is capped at 100% |
 
 ### Execution presets
@@ -88,6 +93,36 @@ A broad region of similar results is more reassuring than one isolated winning p
 
 Slippage is a scenario assumption embedded in execution prices. It is not reconstructed from historical spreads or an order book.
 
+## Options Delta Lab
+
+The Backtest tab now places an option-risk lens beside the Entry Date Simulator and applies the same assumptions to every historical EMA position.
+
+### What it shows
+
+- long call and long put delta at the option-open BTC reference;
+- the same deltas at a historical checkpoint;
+- position delta in BTC-equivalent units for a fractional option quantity;
+- approximate option-value change for a 1% BTC move in USD;
+- covered-call, protective-put, and cash-secured-put net delta interpretations;
+- a dedicated historical table plus a compact delta cell in the main trade log.
+
+For a closed EMA position, the checkpoint is its exit date. For an open EMA position, it is the latest available close. Both are capped at the modeled option expiry; if expiry comes first, the app uses the BTC close at expiry and terminal delta.
+
+### Model contract
+
+The calculator uses standard European Black–Scholes USD spot delta with zero underlying yield. The interpretation follows the [Options Industry Council's delta definition](https://www.optionseducation.org/advancedconcepts/delta): an approximate option-premium change for a $1 move in the underlying, with other inputs held constant.
+
+```text
+d1 = [ln(S / K) + (r + 0.5σ²)T] / (σ√T)
+call Δ = N(d1)
+put Δ  = N(d1) − 1
+ΔUSD ≈ Δ × BTC-equivalent quantity × BTC price change
+```
+
+Long-call delta ranges from 0 to +1 and long-put delta from −1 to 0. A short option reverses the sign. The existing global risk-free input supplies `r`; DTE uses calendar days and `T = DTE / 365.25`.
+
+The repo has no historical option chain, IV surface, or exchange Greek archive. Consequently, IV is a visible constant scenario input and every value is labeled **model estimate**, not historical Deribit delta. It is an informational overlay only: the EMA portfolio still contains no option transaction, leverage, or naked exposure.
+
 ## MVRV and risk overlays
 
 ### MVRV regime filter
@@ -103,7 +138,7 @@ Slippage is a scenario assumption embedded in execution prices. It is not recons
 
 - Optional close-based Wilder volatility trailing stop. It is not textbook ATR because the feed contains no high/low observations.
 - Optional volatility-targeted sizing using 14 complete UTC daily returns.
-- Configurable risk-free rate for Sharpe and target return for Sortino.
+- Configurable risk-free rate for Sharpe and the option-delta model, plus a target return for Sortino. Uninvested strategy cash still earns 0%.
 - No leverage and no exposure above available cash.
 
 ## Reports and metrics
@@ -119,6 +154,7 @@ The terminal includes:
 - monthly return and underwater heatmaps;
 - trade P&L distribution and holding-time scatter;
 - full trade log with signal dates, execution dates, fees, carry, and exit reasons;
+- modeled call/put delta at each entry plus full historical open-to-checkpoint delta cases;
 - RSI, MACD, Kaufman efficiency ratio, close-based volatility, and Bollinger analysis;
 - JPG summary snapshot and machine-readable JSON run export.
 
@@ -135,6 +171,7 @@ Use **Run JSON** in the header or Validation tab. Each export includes:
 - price and MVRV source metadata and SHA-256 content hashes when supported;
 - strategy, buy-and-hold, and EMA-only baseline metrics;
 - costs, open position, and closed trade records;
+- delta model convention, assumptions, selected-entry snapshot, and historical cases;
 - current validation results, or a stale/not-run status.
 
 The source hash makes it possible to tell whether two apparently identical runs used identical fetched bytes.
@@ -170,7 +207,7 @@ Node.js 24 is used in CI, with no package installation required:
 node --test tests/*.test.mjs
 ```
 
-The contract tests cover SMA-seeded EMA values, strict crossover detection, next-close execution, fee/slippage accounting, MVRV availability delay, timestamp-grid validation, and drawdown math.
+The contract tests cover SMA-seeded EMA values, strict crossover detection, next-close execution, fee/slippage accounting, MVRV availability delay, timestamp-grid validation, drawdown math, Black–Scholes call/put delta, expiry behavior, and fractional-quantity USD sensitivity.
 
 ## Repository layout
 
@@ -186,6 +223,7 @@ tests/engine.test.mjs              Deterministic engine contract tests
 
 - Close-only data cannot reproduce intrabar stops, bid/ask spreads, market impact, partial fills, latency, or order-book capacity.
 - Short carry is a user-defined annual rate, not historical exchange funding.
+- Option delta uses a constant user-supplied IV and standard USD spot convention; it does not reconstruct an exchange's historical mark IV, forward, skew, premium-adjusted delta, or settlement convention.
 - MVRV publication timing depends on the upstream source; the configured lag is a research assumption.
 - Backtests describe a historical rule. They do not establish causality, statistical significance, or future returns.
 
