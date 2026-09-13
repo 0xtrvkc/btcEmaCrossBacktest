@@ -157,6 +157,9 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
 .tab-btn.active[data-mode="buyonly"]{color:var(--green);}
 .tab-btn.active[data-mode="shortonly"]{color:var(--red);}
 .tab-btn.active[data-mode="both"]{color:var(--cyan);}
+.pill.active[data-execution-preset="live_aligned"]{color:var(--green);}
+.pill.active[data-execution-preset="exploration"]{color:var(--cyan);}
+.pill.active[data-execution-preset="custom"]{color:var(--amber);}
 
 .controls-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-top:14px;}
 .field{display:flex; flex-direction:column; gap:6px;}
@@ -175,6 +178,46 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
   display:inline-flex; align-items:center; justify-content:center; width:13px;height:13px;border-radius:50%;
   background:var(--surface-2); color:var(--text-faint); font-size:9px; font-family:var(--sans); font-weight:700;
   border:1px solid var(--border-strong); cursor:help;
+}
+
+/* ============================= VALIDATION LAB ============================= */
+.validation-actions{display:flex;align-items:flex-end;gap:10px;min-height:100%;}
+.validation-controls{grid-template-columns:repeat(4,1fr);}
+.primary-action{
+  min-height:36px;padding:8px 15px;border:1px solid color-mix(in srgb,var(--green) 70%,var(--border));
+  border-radius:7px;background:var(--green-dim);color:var(--green);font-family:var(--mono);
+  font-size:11.5px;font-weight:800;letter-spacing:.25px;cursor:pointer;transition:.15s;white-space:nowrap;
+}
+.primary-action:hover{border-color:var(--green);background:color-mix(in srgb,var(--green) 20%,var(--surface));}
+.primary-action:active{transform:scale(.98);}
+.primary-action:disabled{opacity:.6;cursor:progress;transform:none;}
+.validation-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.validation-card{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:14px;min-width:0;}
+.validation-card-label{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.55px;text-transform:uppercase;color:var(--text-faint);}
+.validation-card-value{font-family:var(--mono);font-size:18px;font-weight:800;margin-top:7px;overflow-wrap:anywhere;}
+.validation-card-sub{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);line-height:1.5;margin-top:5px;}
+.sensitivity-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.sensitivity-table{border-collapse:separate;border-spacing:6px;width:100%;min-width:620px;font-family:var(--mono);}
+.sensitivity-table th{position:static;background:transparent;border:none;text-align:center;padding:5px;color:var(--text-faint);}
+.sensitivity-table th:first-child{text-align:left;}
+.sensitivity-cell{border:1px solid var(--border);border-radius:8px;padding:12px!important;text-align:center;white-space:normal;min-width:145px;background:var(--surface-2);}
+.sensitivity-cell.current{border-color:var(--cyan);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cyan) 45%,transparent);}
+.sensitivity-cell.invalid{opacity:.42;background:var(--bg-elevated);}
+.sensitivity-main{font-size:15px;font-weight:800;}
+.sensitivity-sub{font-size:10px;color:var(--text-faint);margin-top:4px;line-height:1.45;}
+.data-quality-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.manifest-hash{font-size:10px;word-break:break-all;line-height:1.5;}
+.validation-stale{color:var(--amber)!important;}
+@media(max-width:900px){
+  .validation-summary{grid-template-columns:repeat(2,1fr);}
+  .data-quality-grid{grid-template-columns:repeat(2,1fr);}
+  .validation-controls{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:640px){
+  .validation-summary,.data-quality-grid{grid-template-columns:1fr;}
+  .validation-controls{grid-template-columns:1fr;}
+  .validation-actions{align-items:stretch;}
+  .primary-action{width:100%;min-height:42px;}
 }
 
 /* ---- chart toolbar ---- */
@@ -443,6 +486,10 @@ tr:hover td{background:var(--surface-2);}
       </div>
       <div class="status-line" id="statusLine"><span class="spinner"></span> fetching 4-hour series</div>
       <button class="btn-export" id="refreshDataBtn" type="button" title="Fetch the latest data again">Refresh</button>
+      <button class="btn-export" id="exportRunBtn" type="button" title="Export a reproducible run manifest as JSON" aria-label="Export run manifest as JSON" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span class="btn-export-label">Run JSON</span>
+      </button>
       <button class="btn-export" id="exportSnapBtn" title="Export a summary snapshot as JPG" aria-label="Export summary snapshot as JPG">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         <span class="btn-export-label">Snapshot</span>
@@ -484,22 +531,35 @@ tr:hover td{background:var(--surface-2);}
 
   <!-- ============ PAGE TABS ============ -->
   <div class="page-tabs" role="tablist">
-    <button class="page-tab-btn active" id="pageTabBacktestBtn" role="tab" aria-selected="true">
+    <button class="page-tab-btn active" id="pageTabBacktestBtn" role="tab" aria-selected="true" aria-controls="tabBacktest">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-4-4L3 15.5"/></svg>
       Backtest
     </button>
-    <button class="page-tab-btn" id="pageTabAnalysisBtn" role="tab" aria-selected="false">
+    <button class="page-tab-btn" id="pageTabAnalysisBtn" role="tab" aria-selected="false" aria-controls="tabAnalysis">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-6 3 3 4-8"/><circle cx="7" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="13" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="17" cy="4" r="1.4" fill="currentColor" stroke="none"/></svg>
       Analysis
       <span class="page-tab-badge">4</span>
     </button>
+    <button class="page-tab-btn" id="pageTabValidationBtn" role="tab" aria-selected="false" aria-controls="tabValidation">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></svg>
+      Validation
+      <span class="page-tab-badge">3</span>
+    </button>
   </div>
 
-  <div id="tabBacktest">
+  <div id="tabBacktest" role="tabpanel" aria-labelledby="pageTabBacktestBtn">
   <!-- ============ CONTROLS ============ -->
   <div class="panel">
     <div class="panel-head">
       <div class="panel-title"><span class="dot"></span> STRATEGY CONFIGURATION</div>
+      <div class="chart-tools">
+        <span class="mono" style="font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.45px;">Execution preset</span>
+        <div class="pillgroup" id="executionPresetGroup" aria-label="Execution cost preset">
+          <button class="pill" data-execution-preset="exploration" title="QuantDinger-style exploration: 0.05% fee and zero slippage per fill.">Exploration</button>
+          <button class="pill active" data-execution-preset="live_aligned" title="QuantDinger-style live-aligned baseline: 0.05% fee plus 0.05% adverse slippage per fill.">Live-aligned</button>
+          <button class="pill" data-execution-preset="custom" title="Keeps the fee and slippage values you enter manually.">Custom</button>
+        </div>
+      </div>
     </div>
     <div class="tabs">
       <button class="tab-btn active" data-mode="buyonly">Buy Only</button>
@@ -513,7 +573,7 @@ tr:hover td{background:var(--surface-2);}
       </div>
       <div class="field">
         <label>Fee / Fill <span class="info-icon" title="Percentage fee on each executed fill. A round trip pays this rate once on entry and once on exit. 0% excludes fees.">i</span></label>
-        <div class="suffix-wrap"><span>%</span><input type="number" id="inFee" value="0" min="0" max="10" step="0.01"></div>
+        <div class="suffix-wrap"><span>%</span><input type="number" id="inFee" value="0.05" min="0" max="10" step="0.01"></div>
       </div>
       <div class="field">
         <label>Sizing / Trade <span class="info-icon" title="Percent of current equity committed to each position. Remainder sits in uninvested cash (0% yield).">i</span></label>
@@ -533,7 +593,7 @@ tr:hover td{background:var(--surface-2);}
       </div>
     </div>
     <div class="controls-grid" style="margin-top:14px;">
-      <div class="field"><label>Slippage / Fill <span class="info-icon" title="Adverse price adjustment on every entry and exit. This is a scenario assumption, not historical spread data.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inSlippage" value="0" min="0" max="5" step="0.01"></div></div>
+      <div class="field"><label>Slippage / Fill <span class="info-icon" title="Adverse price adjustment on every entry and exit. This is a scenario assumption, not historical spread data.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inSlippage" value="0.05" min="0" max="5" step="0.01"></div></div>
       <div class="field"><label>Short Carry / Year <span class="info-icon" title="Annual cost on short notional, integrated over elapsed time. Zero excludes funding/borrow cost; this does not reproduce an exchange funding history.">i</span></label><div class="suffix-wrap"><span>%</span><input type="number" id="inShortCarry" value="0" min="0" max="100" step="0.1"></div></div>
       <div class="field"><label>Risk-free Rate / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inRiskFree" value="0" min="-99" max="100" step="0.1"></div></div>
       <div class="field"><label>Sortino Target / Year</label><div class="suffix-wrap"><span>%</span><input type="number" id="inDownsideTarget" value="0" min="-99" max="100" step="0.1"></div></div>
@@ -975,7 +1035,7 @@ tr:hover td{background:var(--surface-2);}
     <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--text-faint)"></span> METHODOLOGY</div></div>
     <div class="notes">
       <b>Data</b> — validated BTC/USD close observations for the selected timeframe. Use Refresh to fetch again; the page does not stream prices. Timestamp labels are normalized to UTC. Gaps are flagged, not fabricated.<br>
-      <b>Signal and execution</b> — SMA-seeded EMA periods count observed bars. A completed-close signal fills at the next available close, with configurable adverse slippage and per-fill fees. Signals on the last bar remain unfilled. Backtests start in cash and wait for a new crossover.<br>
+      <b>Signal and execution</b> — SMA-seeded EMA periods count observed bars. A completed-close signal fills at the next available close, with configurable adverse slippage and per-fill fees. Live-aligned defaults to 0.05% fee plus 0.05% slippage per fill; presets never hide their inputs. Signals on the last bar remain unfilled. Backtests start in cash and wait for a new crossover.<br>
       <b>MVRV</b> — observations retain their source timestamp and receive the configured calendar-day delay. Values older than the maximum age are unavailable. Gate blocks entries; Scale changes new-entry size only. Missing observations block new entries and queue an exit of an open position. Publication lag is an explicit research assumption.<br>
       <b>Sizing</b> — all entry costs fit within the cash budget, capped at 100% after overlays. Uninvested cash earns 0%; the risk-free input is only a Sharpe benchmark. Volatility sizing uses sample standard deviation of 14 completed daily returns and waits for that estimate to become available.<br>
       <b>Shorts</b> — fixed BTC quantity with linear USD P&amp;L. Optional annual carry is integrated on prior-bar notional. This is not an exchange margin/liquidation simulation. If sampled portfolio value cannot cover closure, the model records a capital-exhaustion exit and stops trading; a price gap can leave a deficit.<br>
@@ -984,13 +1044,14 @@ tr:hover td{background:var(--surface-2);}
       <b>Risk statistics</b> — Sharpe uses sample SD (N−1) and the configured risk-free rate. Sortino uses all N returns in the downside denominator. Both use complete, consecutive UTC daily intervals and √365.25 scaling; partial/gapped daily returns are excluded. Square-root scaling does not correct serial dependence or establish significance.<br>
       <b>Drawdown</b> — main drawdown uses every loaded bar and starts at initial capital. Rolling max drawdown retains the worst ordered peak-to-trough decline inside each window. Episode durations start at the prior peak; averages use recovered episodes. Ulcer Index uses available UTC day-end equity.<br>
       <b>Filter impact</b> — the comparison disables only MVRV and retains all other settings, costs and dates. The buy-and-hold benchmark buys at the initial available close and remains open; neither open strategy positions nor buy-and-hold are charged a hypothetical final exit fee.<br>
-      <b>Validation</b> — historical parameter/start-date selection can overfit. These descriptive metrics do not establish a predictive edge. Test fixed rules on subsequent data and report uncertainty before relying on results.
+      <b>Reproducibility</b> — Run JSON records the versioned engine contract, public configuration, data-source hashes, metrics, costs, positions, and trades. Identical hashes identify identical fetched bytes.<br>
+      <b>Validation</b> — the Validation tab performs a chronological fixed-rule split, a common-window EMA neighborhood, and execution-cost stress. Historical parameter/start-date selection can still overfit; these diagnostics do not establish a predictive edge or statistical significance.
     </div>
   </div>
   </div> <!-- /tabBacktest -->
 
   <!-- ============ ANALYSIS TAB ============ -->
-  <div id="tabAnalysis" style="display:none;">
+  <div id="tabAnalysis" role="tabpanel" aria-labelledby="pageTabAnalysisBtn" style="display:none;">
 
     <div class="panel" style="background:transparent; border-style:dashed; box-shadow:none;">
       <div class="panel-head" style="margin-bottom:8px;">
@@ -1071,6 +1132,111 @@ tr:hover td{background:var(--surface-2);}
 
   </div> <!-- /tabAnalysis -->
 
+  <!-- ============ VALIDATION TAB ============ -->
+  <div id="tabValidation" role="tabpanel" aria-labelledby="pageTabValidationBtn" style="display:none;">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--green)"></span> VALIDATION LAB</div>
+        <div id="validationStatus" class="mono" role="status" aria-live="polite" style="font-size:11px;color:var(--text-faint);">Ready after data loads</div>
+      </div>
+      <div class="notes">
+        <a href="https://github.com/OpenByteInc/QuantDinger" target="_blank" rel="noopener noreferrer">QuantDinger</a> treats a backtest as a reproducible research run, not just one attractive equity curve. This lab keeps your exact EMA/MVRV/risk rules and challenges them three ways: a later time block, nearby EMA settings, and harsher execution costs.
+      </div>
+      <div class="controls-grid validation-controls">
+        <div class="field">
+          <label>Earlier-period share <span class="info-icon" title="Chronological split. The first block is shown as Earlier and the remaining block as Later. No rows are shuffled.">i</span></label>
+          <div class="suffix-wrap"><span>%</span><input type="number" id="inValidationSplit" value="70" min="50" max="90" step="5"></div>
+        </div>
+        <div class="field">
+          <label>EMA neighborhood <span class="info-icon" title="Re-runs a 3×3 grid at the current periods minus, equal to, and plus this percentage. Every valid cell uses one common start date.">i</span></label>
+          <div class="suffix-wrap"><span>%</span><input type="number" id="inSensitivityPct" value="20" min="5" max="50" step="5"></div>
+        </div>
+        <div class="field">
+          <label>Cost stress <span class="info-icon" title="Multiplies fee, slippage, and short carry while leaving signals and sizing rules unchanged.">i</span></label>
+          <div class="suffix-wrap"><span>×</span><input type="number" id="inCostStress" value="2" min="1" max="10" step="0.5"></div>
+        </div>
+        <div class="validation-actions">
+          <button class="primary-action" id="runValidationBtn" type="button">Run 3 validation checks</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="validation-summary">
+      <div class="validation-card">
+        <div class="validation-card-label">Later period begins</div>
+        <div class="validation-card-value" id="valHoldoutDate">—</div>
+        <div class="validation-card-sub" id="valHoldoutSub">Chronological holdout</div>
+      </div>
+      <div class="validation-card">
+        <div class="validation-card-label">Later-period CAGR</div>
+        <div class="validation-card-value" id="valOosCagr">—</div>
+        <div class="validation-card-sub" id="valOosSub">Fixed rules, later data</div>
+      </div>
+      <div class="validation-card">
+        <div class="validation-card-label">Positive neighborhoods</div>
+        <div class="validation-card-value" id="valSensitivityPass">—</div>
+        <div class="validation-card-sub" id="valSensitivitySub">Valid nearby EMA pairs</div>
+      </div>
+      <div class="validation-card">
+        <div class="validation-card-label">Cost-stressed CAGR change</div>
+        <div class="validation-card-value" id="valCostImpact">—</div>
+        <div class="validation-card-sub" id="valCostSub">Base minus stressed</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--violet)"></span> 1 · CHRONOLOGICAL HOLDOUT</div>
+      </div>
+      <div class="metrics-table-wrap">
+        <table class="metrics-table">
+          <thead><tr><th>Metric</th><th class="mt-val-h">Full period</th><th class="mt-val-h">Earlier block</th><th class="mt-val-h">Later block</th></tr></thead>
+          <tbody id="validationMetrics"><tr><td colspan="4">Run validation to calculate.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="notes" id="holdoutNote" style="margin-top:11px;">The rule is reset to cash at the start of each block and waits for the next crossover. EMA warm-up uses only prices that existed before each bar.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--cyan)"></span> 2 · EMA PARAMETER NEIGHBORHOOD</div>
+        <div class="mono" id="sensitivityMeta" style="font-size:10.5px;color:var(--text-faint);">—</div>
+      </div>
+      <div class="sensitivity-wrap" id="sensitivityGrid">
+        <div class="notes">Run validation to calculate the 3×3 neighborhood.</div>
+      </div>
+      <div class="notes" style="margin-top:11px;">Each cell reports CAGR and maximum drawdown. A broad patch of similar results is healthier than one isolated winning pair. This is a sensitivity check, not proof of predictive power.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span> 3 · EXECUTION COST STRESS</div>
+      </div>
+      <div class="metrics-table-wrap">
+        <table class="metrics-table">
+          <thead><tr><th>Metric</th><th class="mt-val-h">Base costs</th><th class="mt-val-h" id="costStressHeader">Stressed costs</th><th>Change</th></tr></thead>
+          <tbody id="costStressMetrics"><tr><td colspan="4">Run validation to calculate.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="notes" id="costStressNote" style="margin-top:11px;">Fee, adverse slippage, and short carry are stressed together. The test does not invent historical spreads or funding rates.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--text-faint)"></span> DATA &amp; REPRODUCIBILITY</div>
+        <button class="toggle-log" id="exportRunInlineBtn" type="button">Export run JSON</button>
+      </div>
+      <div class="data-quality-grid">
+        <div class="validation-card"><div class="validation-card-label">Price observations</div><div class="validation-card-value" id="dqBars">—</div><div class="validation-card-sub" id="dqBarsSub">—</div></div>
+        <div class="validation-card"><div class="validation-card-label">Missing expected bars</div><div class="validation-card-value" id="dqMissing">—</div><div class="validation-card-sub">Flagged, never forward-filled</div></div>
+        <div class="validation-card"><div class="validation-card-label">MVRV available</div><div class="validation-card-value" id="dqMvrv">—</div><div class="validation-card-sub" id="dqMvrvSub">After configured lag and max age</div></div>
+        <div class="validation-card"><div class="validation-card-label">Price dataset hash</div><div class="validation-card-value manifest-hash" id="dqPriceHash">—</div><div class="validation-card-sub">Identifies the fetched input bytes</div></div>
+        <div class="validation-card"><div class="validation-card-label">MVRV dataset hash</div><div class="validation-card-value manifest-hash" id="dqMvrvHash">—</div><div class="validation-card-sub">Included only when available</div></div>
+        <div class="validation-card"><div class="validation-card-label">Engine contract</div><div class="validation-card-value" id="dqEngine">—</div><div class="validation-card-sub">Versioned assumptions in every JSON export</div></div>
+      </div>
+    </div>
+  </div> <!-- /tabValidation -->
+
   <div class="footer">
     BTC EMA CROSS + MVRV REGIME FILTER · BACKTEST TERMINAL &nbsp;·&nbsp; data: 0xtrvkc/dynamic-btc-analytics-dashboard &nbsp;·&nbsp; client-side computation, nothing leaves your browser
   </div>
@@ -1145,6 +1311,7 @@ let ANALYSIS = null; // { rsi, macd:{macdLine,signalLine,hist}, trendEff, atr, b
 let lastEntrySpanDays = 0; // days between current Entry Date and the last available bar — used by updateRollWindowCap
 let state = {
   mode: 'buyonly',
+  executionPreset: 'live_aligned',
   startTimestamp: null,
   timeframe: '4h',
   priceRange: 'all',
@@ -1178,10 +1345,14 @@ const fmtSignedPct = (v, dp=2) => {
   return s+(v*100).toFixed(dp)+'%';
 };
 const fmtBTC = (v) => v==null||!isFinite(v) ? '—' : v.toLocaleString('en-US',{minimumFractionDigits:5,maximumFractionDigits:5})+' BTC';
-const ENGINE_VERSION = 'quant-2.0.0';
+const ENGINE_VERSION = 'quant-3.0.0';
 const DAY_MS = 86400000;
 const YEAR_DAYS = 365.25;
 const POLICY = Object.freeze({ minCagrDays:30, minRiskReturns:10, minRollingReturns:20, volDays:14, mvrvLagDays:1, mvrvMaxAgeDays:3 });
+const EXECUTION_PRESETS = Object.freeze({
+  exploration:{feePct:.0005,slippagePct:0,label:'Exploration'},
+  live_aligned:{feePct:.0005,slippagePct:.0005,label:'Live-aligned'}
+});
 function parseTs(value){
   const s = String(value);
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);
@@ -1881,7 +2052,7 @@ function inputNumber(id,label,min,max,integer=false){
 }
 function readConfig(){
   const cfg={
-    mode:state.mode,timeframe:state.timeframe,initialCapital:inputNumber('inCapital','Initial capital',1,1e12),
+    mode:state.mode,timeframe:state.timeframe,executionPreset:state.executionPreset,initialCapital:inputNumber('inCapital','Initial capital',1,1e12),
     feePct:inputNumber('inFee','Fee per fill (%)',0,10)/100,sizingPct:inputNumber('inSizing','Sizing (%)',1,100)/100,
     slippagePct:inputNumber('inSlippage','Slippage per fill (%)',0,5)/100,shortCarryRate:inputNumber('inShortCarry','Short carry per year (%)',0,100)/100,
     riskFreeRate:inputNumber('inRiskFree','Risk-free rate (%)',-99,100)/100,downsideTarget:inputNumber('inDownsideTarget','Sortino target (%)',-99,100)/100,
@@ -1899,6 +2070,22 @@ function readConfig(){
   if(cfg.mvrv.longReduce>=cfg.mvrv.longExit||cfg.mvrv.shortExit>=cfg.mvrv.shortReduce)throw new Error('Use Long Reduce < Long Exit and Short Exit < Short Reduce.');
   if(cfg.mvrv.maxAgeDays<cfg.mvrv.lagDays)throw new Error('MVRV maximum age must be at least the calendar-day lag.');
   return cfg;
+}
+function syncExecutionPresetUI(){
+  document.querySelectorAll('[data-execution-preset]').forEach(btn=>btn.classList.toggle('active',btn.dataset.executionPreset===state.executionPreset));
+}
+function applyExecutionPreset(name){
+  if(name==='custom'){
+    state.executionPreset='custom';syncExecutionPresetUI();markValidationStale('Execution preset changed.');recompute();return;
+  }
+  const preset=EXECUTION_PRESETS[name];if(!preset)return;
+  state.executionPreset=name;$('inFee').value=(preset.feePct*100).toFixed(2);$('inSlippage').value=(preset.slippagePct*100).toFixed(2);
+  syncExecutionPresetUI();markValidationStale('Execution costs changed.');recompute();
+}
+function markExecutionCustom(){
+  const fee=Number($('inFee').value)/100,slip=Number($('inSlippage').value)/100;
+  const match=Object.entries(EXECUTION_PRESETS).find(([,p])=>Math.abs(p.feePct-fee)<1e-12&&Math.abs(p.slippagePct-slip)<1e-12);
+  state.executionPreset=match?match[0]:'custom';syncExecutionPresetUI();
 }
 // Daily sample volatility, available only after completed daily observations.
 function volSizeMultiplier(price,volatility,vcfg){
@@ -1995,6 +2182,8 @@ function livePreview(idx){
 }
 
 let lastResult = null;
+let lastValidation = null;
+let validationStale = true;
 let rafPending = false;
 let sliderDragging = false;
 function scheduleRecompute(){
@@ -2004,7 +2193,7 @@ function scheduleRecompute(){
 }
 
 function showRunIssue(message){
-  lastResult=null;$('exportSnapBtn').disabled=true;$('statusLine').textContent='Results unavailable';
+  lastResult=null;$('exportSnapBtn').disabled=true;$('exportRunBtn').disabled=true;$('statusLine').textContent='Results unavailable';
   const notice=$('runNotice');notice.textContent=message;notice.style.color='var(--red)';
   for(const key of Object.keys(charts)){if(charts[key]){charts[key].destroy();charts[key]=null;}}
   for(const id of ['grpReturn','grpTrades','grpDrawdown','grpRisk','grpTiming','grpFilterImpact'])$(id).innerHTML='<tr><td colspan="4">Correct the settings or refresh the data to calculate results.</td></tr>';
@@ -2030,6 +2219,137 @@ function computeRun(cfg){
   const rollStrat=rollingReturn(RAW.dates,bt.equity,startIndex,state.rollWindowYears*YEAR_DAYS),rollHold=rollingReturn(RAW.dates,bh.eq,startIndex,state.rollWindowYears*YEAR_DAYS);
   return {cfg,emaFast,emaSlow,signals,startIndex,bt,bh,metrics,metricsHold,btBase,metricsBase,rollStrat,rollHold};
 }
+function publicConfig(cfg){
+  return Object.fromEntries(Object.entries(cfg).filter(([key])=>key!=='atrSeries'&&key!=='volSeries'));
+}
+function metricSnapshot(metrics){
+  const keys=['years','cagr','annualizedReturn','completeYears','finalEquity','profitFactor','winRate','tradesPerYear','totalTrades','breakevens','maxProfit','minProfitPositive','avgProfit','maxDrawdown','avgDrawdown','minDrawdown','trueDrawdown','maxWinStreak','maxLossStreak','profitHold','lossHold','dailyReturnCount','sharpe','sortino','calmar','ulcerIndex','realizedPnl','unrealizedPnl'];
+  return Object.fromEntries(keys.map(key=>[key,metrics[key]===Infinity?'Infinity':metrics[key]]));
+}
+function computeCompactMetrics(dates,startIndex,equity,trades,cfg){
+  const finalEquity=equity.at(-1),days=daysBetween(dates[startIndex],dates.at(-1)),years=days/YEAR_DAYS;
+  const cagr=finalEquity===0&&years>0?-1:finalEquity>0&&days>=POLICY.minCagrDays?Math.expm1(Math.log(finalEquity/cfg.initialCapital)/years):null;
+  let peak=cfg.initialCapital,maxDrawdown=0;for(let i=startIndex;i<equity.length;i++){const value=equity[i];if(!Number.isFinite(value))continue;peak=Math.max(peak,value);if(peak>0)maxDrawdown=Math.min(maxDrawdown,value/peak-1);}
+  let grossProfit=0,grossLoss=0;for(const trade of trades){if(tradeOutcome(trade)>0)grossProfit+=trade.pnlDollar;else if(tradeOutcome(trade)<0)grossLoss-=trade.pnlDollar;}
+  return {finalEquity,cagr,maxDrawdown,totalTrades:trades.length,profitFactor:grossLoss>0?grossProfit/grossLoss:grossProfit>0?Infinity:null};
+}
+function computeScenario(cfg,startIndex,endIndex,periods={fast:cfg.emaFast,slow:cfg.emaSlow},options={}){
+  if(!Number.isInteger(startIndex)||!Number.isInteger(endIndex)||startIndex<0||endIndex<=startIndex||endIndex>=RAW.dates.length)throw new Error('Validation window is too short.');
+  const dates=RAW.dates.slice(0,endIndex+1),prices=RAW.prices.slice(0,endIndex+1),mvrv=RAW.mvrv.slice(0,endIndex+1);
+  const emaFast=computeEMA(prices,periods.fast),emaSlow=computeEMA(prices,periods.slow),signals=generateSignals(emaFast,emaSlow);
+  const scenarioCfg={...cfg,emaFast:periods.fast,emaSlow:periods.slow,atrSeries:(cfg.atrSeries||[]).slice(0,endIndex+1),volSeries:(cfg.volSeries||[]).slice(0,endIndex+1)};
+  const bt=runBacktest(dates,prices,mvrv,signals,scenarioCfg,startIndex),metrics=options.compact?computeCompactMetrics(dates,startIndex,bt.equity,bt.trades,scenarioCfg):computeMetrics(dates,prices,startIndex,bt.equity,bt.trades,scenarioCfg,bt.openPosition);
+  const bh=options.benchmark===false?null:buyAndHoldEquity(dates,prices,scenarioCfg,startIndex);
+  const metricsHold=bh?computeMetrics(dates,prices,startIndex,bh.eq,[],scenarioCfg,null):null;
+  return {startIndex,endIndex,cfg:scenarioCfg,bt,bh,metrics,metricsHold};
+}
+function neighborhoodValues(base,pct,min,max){
+  const low=Math.max(min,Math.min(base-1,Math.round(base*(1-pct))));
+  const high=Math.min(max,Math.max(base+1,Math.round(base*(1+pct))));
+  return Array.from(new Set([low,base,high])).sort((a,b)=>a-b);
+}
+function validationConfigKey(cfg){
+  return JSON.stringify({engine:ENGINE_VERSION,config:publicConfig(cfg),priceHash:DATA_META?.hash||null,mvrvHash:MVRV_META?.hash||null});
+}
+function markValidationStale(reason='Inputs changed.'){
+  validationStale=true;
+  const status=$('validationStatus');
+  if(status){status.textContent=lastValidation?reason+' Run the checks again.':'Ready to run';status.classList.add('validation-stale');}
+}
+function validationMetricRow(label,full,earlier,later,formatter,tip=''){
+  const info=tip?` <span class="info-icon" title="${escAttr(tip)}">i</span>`:'';
+  return `<tr><td class="mt-label">${label}${info}</td><td class="mt-val">${formatter(full)}</td><td class="mt-val">${formatter(earlier)}</td><td class="mt-val">${formatter(later)}</td></tr>`;
+}
+function renderValidationDataQuality(){
+  if(!RAW.dates.length)return;
+  let cfg=null;try{cfg=lastResult?.cfg||readConfig();}catch(_error){}
+  const from=lastResult?.startIndex||0,eligible=Math.max(0,RAW.dates.length-from),available=RAW.mvrv.slice(from).filter(Number.isFinite).length;
+  $('dqBars').textContent=RAW.dates.length.toLocaleString('en-US');
+  $('dqBarsSub').textContent=fmtDate(RAW.dates[0])+' → '+fmtDate(RAW.dates.at(-1))+' · '+TF_LABELS[state.timeframe];
+  $('dqMissing').textContent=(DATA_META?.missingBars||0).toLocaleString('en-US');
+  $('dqMvrv').textContent=eligible?fmtPct(available/eligible,1):'—';
+  $('dqMvrvSub').textContent=cfg?'Lag '+cfg.mvrv.lagDays+'d · max age '+cfg.mvrv.maxAgeDays+'d':'After configured availability rules';
+  $('dqPriceHash').textContent=DATA_META?.hash||'Unavailable';
+  $('dqMvrvHash').textContent=MVRV_META?.hash||'Unavailable';
+  $('dqEngine').textContent=ENGINE_VERSION;
+}
+function renderValidationSuite(){
+  if(!lastValidation)return;
+  const v=lastValidation,{full,earlier,later,splitIndex,sensitivity,costStress,cfg}=v;
+  $('valHoldoutDate').textContent=fmtDate(RAW.dates[splitIndex]);
+  $('valHoldoutSub').textContent=Math.round(v.splitPct*100)+'% earlier · '+Math.round((1-v.splitPct)*100)+'% later by elapsed time';
+  const oos=$('valOosCagr');oos.textContent=fmtSignedPct(later.metrics.cagr);oos.style.color=later.metrics.cagr==null?'var(--text)':later.metrics.cagr>=0?'var(--green)':'var(--red)';
+  $('valOosSub').textContent=later.metrics.totalTrades+' closed trades · '+later.metrics.dailyReturnCount+' daily returns';
+  $('valSensitivityPass').textContent=sensitivity.positive+'/'+sensitivity.valid;
+  $('valSensitivitySub').textContent='CAGR > 0 · common start '+RAW.dates[sensitivity.commonStartIndex].slice(0,10);
+  const cagrChange=costStress.stressed.metrics.cagr!=null&&full.metrics.cagr!=null?costStress.stressed.metrics.cagr-full.metrics.cagr:null;
+  const impact=$('valCostImpact');impact.textContent=fmtSignedPct(cagrChange);impact.style.color=cagrChange==null?'var(--text)':cagrChange>=0?'var(--green)':'var(--red)';
+  $('valCostSub').textContent=costStress.multiplier.toFixed(1)+'× costs · stressed minus base';
+
+  const pf=v=>v===Infinity?'∞':Number.isFinite(v)?v.toFixed(2):'—';
+  $('validationMetrics').innerHTML=[
+    validationMetricRow('Period',full.metrics.years,earlier.metrics.years,later.metrics.years,v=>Number.isFinite(v)?v.toFixed(2)+' yrs':'—','Exact elapsed UTC years in each independently reset block.'),
+    validationMetricRow('Final Equity',full.metrics.finalEquity,earlier.metrics.finalEquity,later.metrics.finalEquity,fmtUSDFull,'Every block starts with the configured initial capital.'),
+    validationMetricRow('CAGR',full.metrics.cagr,earlier.metrics.cagr,later.metrics.cagr,fmtSignedPct,'Annualized only when a block contains at least '+POLICY.minCagrDays+' days.'),
+    validationMetricRow('Max Drawdown',full.metrics.maxDrawdown,earlier.metrics.maxDrawdown,later.metrics.maxDrawdown,fmtPct),
+    validationMetricRow('Sharpe',full.metrics.sharpe,earlier.metrics.sharpe,later.metrics.sharpe,pf,'Uses complete, consecutive UTC daily returns and the configured risk-free rate.'),
+    validationMetricRow('Profit Factor',full.metrics.profitFactor,earlier.metrics.profitFactor,later.metrics.profitFactor,pf),
+    validationMetricRow('Win Rate',full.metrics.winRate,earlier.metrics.winRate,later.metrics.winRate,fmtPct),
+    validationMetricRow('Closed Trades',full.metrics.totalTrades,earlier.metrics.totalTrades,later.metrics.totalTrades,v=>String(v))
+  ].join('');
+  $('holdoutNote').textContent='Earlier: '+fmtDate(RAW.dates[full.startIndex])+' → '+fmtDate(RAW.dates[earlier.endIndex])+' · Later: '+fmtDate(RAW.dates[later.startIndex])+' → '+fmtDate(RAW.dates[later.endIndex])+'. Each block resets to cash and waits for a new crossover; no open position crosses the boundary.';
+
+  const header='<thead><tr><th>Fast ↓ / Slow →</th>'+sensitivity.slowValues.map(s=>'<th>'+s+'</th>').join('')+'</tr></thead>';
+  const body=sensitivity.fastValues.map(f=>'<tr><th>Fast '+f+'</th>'+sensitivity.slowValues.map(s=>{
+    const cell=sensitivity.cells.find(c=>c.fast===f&&c.slow===s);
+    if(!cell||!cell.valid)return '<td class="sensitivity-cell invalid">Invalid<br><span class="sensitivity-sub">fast must be below slow</span></td>';
+    const m=cell.run.metrics,finite=Number.isFinite(m.cagr),positive=finite&&m.cagr>=0,intensity=Math.min(28,8+Math.round(Math.abs(m.cagr||0)*24));
+    const style=finite?'background:color-mix(in srgb,'+(positive?'var(--green)':'var(--red)')+' '+intensity+'%,var(--surface-2));':'';
+    return '<td class="sensitivity-cell '+(cell.current?'current':'')+'" style="'+style+'" title="Final equity '+escAttr(fmtUSDFull(m.finalEquity))+'; profit factor '+pf(m.profitFactor)+'"><div class="sensitivity-main">'+fmtSignedPct(m.cagr)+'</div><div class="sensitivity-sub">DD '+fmtPct(m.maxDrawdown)+' · '+m.totalTrades+' trades'+(cell.current?' · CURRENT':'')+'</div></td>';
+  }).join('')+'</tr>').join('');
+  $('sensitivityGrid').innerHTML='<table class="sensitivity-table">'+header+'<tbody>'+body+'</tbody></table>';
+  $('sensitivityMeta').textContent='Common window '+fmtDate(RAW.dates[sensitivity.commonStartIndex])+' → '+fmtDate(RAW.dates.at(-1));
+
+  const base=full,stress=costStress.stressed,mult=costStress.multiplier,delta=(a,b,fmt)=>Number.isFinite(a)&&Number.isFinite(b)?fmt(b-a):'—';
+  $('costStressHeader').textContent=mult.toFixed(1)+'× costs';
+  $('costStressMetrics').innerHTML=[
+    ['Final Equity',base.metrics.finalEquity,stress.metrics.finalEquity,fmtUSDFull,(a,b)=>delta(a,b,fmtUSDFull)],
+    ['CAGR',base.metrics.cagr,stress.metrics.cagr,fmtSignedPct,(a,b)=>delta(a,b,fmtSignedPct)],
+    ['Max Drawdown',base.metrics.maxDrawdown,stress.metrics.maxDrawdown,fmtPct,(a,b)=>delta(a,b,fmtSignedPct)],
+    ['Sharpe',base.metrics.sharpe,stress.metrics.sharpe,pf,(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?(b-a).toFixed(2):'—'],
+    ['Explicit Fees + Carry',base.bt.totalFees+base.bt.totalCarry,stress.bt.totalFees+stress.bt.totalCarry,fmtUSDFull,(a,b)=>delta(a,b,fmtUSDFull)]
+  ].map(([label,a,b,fmt,df])=>'<tr><td class="mt-label">'+label+'</td><td class="mt-val">'+fmt(a)+'</td><td class="mt-val">'+fmt(b)+'</td><td class="mt-sub">'+df(a,b)+'</td></tr>').join('');
+  $('costStressNote').textContent='Base: fee '+fmtPct(cfg.feePct)+' / fill, slippage '+fmtPct(cfg.slippagePct)+' / fill, short carry '+fmtPct(cfg.shortCarryRate)+' / year. Stress: '+fmtPct(costStress.cfg.feePct)+', '+fmtPct(costStress.cfg.slippagePct)+', '+fmtPct(costStress.cfg.shortCarryRate)+'. Slippage remains embedded in execution prices.';
+  renderValidationDataQuality();
+}
+async function runValidationSuite(){
+  const btn=$('runValidationBtn'),status=$('validationStatus');
+  if(DATA_PENDING||!RAW.dates.length){if(status)status.textContent='Wait for data to finish loading.';return;}
+  btn.disabled=true;btn.textContent='Running…';status.textContent='Running 3 deterministic checks…';status.classList.remove('validation-stale');
+  await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+  try{
+    const cfg=readConfig(),end=RAW.dates.length-1,warmup=Math.max(cfg.emaFast,cfg.emaSlow)-1,userStart=lowerBound(RAW.dates,cfg.startDate),start=Math.max(warmup,userStart),splitPct=inputNumber('inValidationSplit','Earlier-period share (%)',50,90)/100;
+    if(start>=end)throw new Error('The selected history is too short for validation.');
+    RAW.mvrv=alignMvrv(RAW.dates,MVRV_RECORDS,cfg.mvrv.lagDays,cfg.mvrv.maxAgeDays);
+    if(cfg.mvrv.mode!=='off'&&!RAW.mvrv.slice(start).some(Number.isFinite))throw new Error('MVRV is unavailable in the validation window.');
+    const span=parseTs(RAW.dates[end]).getTime()-parseTs(RAW.dates[start]).getTime(),target=parseTs(RAW.dates[start]).getTime()+span*splitPct;
+    const splitIndex=Math.min(end-1,Math.max(start+1,lowerBound(RAW.dates,target)));
+    const key=validationConfigKey(cfg),full=lastResult&&validationConfigKey(lastResult.cfg)===key?{startIndex:start,endIndex:end,cfg,bt:lastResult.bt,bh:lastResult.bh,metrics:lastResult.metrics,metricsHold:lastResult.metricsHold}:computeScenario(cfg,start,end);
+    const earlier=computeScenario(cfg,start,splitIndex-1),later=computeScenario(cfg,splitIndex,end);
+    const pct=inputNumber('inSensitivityPct','EMA neighborhood (%)',5,50)/100,fastValues=neighborhoodValues(cfg.emaFast,pct,2,300),slowValues=neighborhoodValues(cfg.emaSlow,pct,3,500);
+    const commonStartIndex=Math.max(lowerBound(RAW.dates,cfg.startDate),Math.max(...slowValues)-1),cells=[];
+    for(const fast of fastValues)for(const slow of slowValues){
+      if(fast>=slow){cells.push({fast,slow,valid:false,current:fast===cfg.emaFast&&slow===cfg.emaSlow});continue;}
+      cells.push({fast,slow,valid:true,current:fast===cfg.emaFast&&slow===cfg.emaSlow,run:computeScenario(cfg,commonStartIndex,end,{fast,slow},{compact:true,benchmark:false})});
+    }
+    const validCells=cells.filter(c=>c.valid),positive=validCells.filter(c=>Number.isFinite(c.run.metrics.cagr)&&c.run.metrics.cagr>0).length;
+    const multiplier=inputNumber('inCostStress','Cost stress multiplier',1,10),stressCfg={...cfg,executionPreset:'stress_'+multiplier.toFixed(1)+'x',feePct:Math.min(.1,cfg.feePct*multiplier),slippagePct:Math.min(.05,cfg.slippagePct*multiplier),shortCarryRate:Math.min(1,cfg.shortCarryRate*multiplier)};
+    const stressed=computeScenario(stressCfg,start,end);
+    lastValidation={key,cfg,splitPct,splitIndex,full,earlier,later,sensitivity:{pct,fastValues,slowValues,cells,valid:validCells.length,positive,commonStartIndex},costStress:{multiplier,cfg:stressCfg,stressed},generatedAt:new Date().toISOString()};
+    validationStale=false;renderValidationSuite();status.textContent='Validated '+new Date().toLocaleTimeString('en-US',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})+' UTC';
+  }catch(error){status.textContent='Validation unavailable: '+error.message;status.classList.add('validation-stale');console.error(error);}
+  finally{btn.disabled=false;btn.textContent='Run 3 validation checks';}
+}
 function recompute(){
   if(DATA_PENDING)return false;
   if(!RAW.dates.length){showRunIssue('Load a valid price dataset to calculate results.');return false;}
@@ -2038,7 +2358,8 @@ function recompute(){
     renderTicker();renderPriceChart();renderEquityChart();renderDrawdownChart();renderDrawdownEpisodesCharts();renderTimeUnderwaterPanel();renderRollingRiskCharts();
     renderRealizedPnlChart();renderUnderwaterHeatmap();renderRollingChart();renderMvrvChart();renderMetrics();renderMonthlyHeatmap();renderPnlHistogram();renderDurationScatter();renderFilterImpact();renderHoldVsTrade();
     if(!sliderDragging)renderTradeLog();updateEntryReadout();$('inStartSlider').min=Math.max(cfg.emaFast,cfg.emaSlow)-1;$('inStartSlider').value=lastResult.startIndex;
-    const messages=['Fills: next available close · exposure at entry capped at 100% · risk statistics: complete UTC days'];
+    const presetLabel=EXECUTION_PRESETS[cfg.executionPreset]?.label||'Custom';
+    const messages=['Fills: next available close · exposure at entry capped at 100% · execution: '+presetLabel+' ('+fmtPct(cfg.feePct)+' fee + '+fmtPct(cfg.slippagePct)+' slippage / fill) · risk statistics: complete UTC days'];
     const absent=RAW.mvrv.slice(lastResult.startIndex).filter(v=>!Number.isFinite(v)).length;
     if(cfg.mvrv.mode!=='off')messages.push('MVRV: '+cfg.mvrv.lagDays+' calendar-day lag, maximum age '+cfg.mvrv.maxAgeDays+'d'+(absent?' · '+absent+' bars unavailable: entries blocked, open positions exit on the next close':''));
     else if(MVRV_ERROR)messages.push('MVRV could not load; its filter is explicitly Off.');
@@ -2049,7 +2370,9 @@ function recompute(){
     const age=Date.now()-parseTs(RAW.dates.at(-1)).getTime();if(age>Math.max(2*intervalMs(state.timeframe),2*DAY_MS))messages.push('Latest price is '+Math.floor(age/DAY_MS)+' days old. Refresh to check for updates.');
     $('runNotice').textContent=messages.join(' · ');$('runNotice').style.color=lastResult.bt.insolvent?'var(--red)':'var(--text-dim)';
     $('statusLine').textContent=RAW.dates.length.toLocaleString('en-US')+' '+TF_LABELS[state.timeframe].toLowerCase()+' bars · fetched '+(DATA_META?fmtDate(DATA_META.fetchedAt):'locally');
-    $('exportSnapBtn').disabled=false;return true;
+    $('exportSnapBtn').disabled=false;$('exportRunBtn').disabled=false;renderValidationDataQuality();
+    if(!lastValidation){$('validationStatus').textContent='Ready to run';$('validationStatus').classList.add('validation-stale');}
+    return true;
   }catch(error){showRunIssue(error.message);console.error(error);return false;}
 }
 
@@ -3457,11 +3780,16 @@ function renderTradeLog(){
    EVENTS
 ====================================================================== */
 function wireEvents(){
+  document.querySelectorAll('[data-execution-preset]').forEach(btn=>{
+    btn.addEventListener('click',()=>applyExecutionPreset(btn.dataset.executionPreset));
+  });
+
   document.querySelectorAll('.tab-btn[data-mode]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('.tab-btn[data-mode]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.mode = btn.dataset.mode;
+      markValidationStale('Trading mode changed.');
       recompute();
     });
   });
@@ -3471,6 +3799,7 @@ function wireEvents(){
       document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.mvrvMode = btn.dataset.mvrvmode;
+      markValidationStale('MVRV rules changed.');
       recompute();
     });
   });
@@ -3480,6 +3809,7 @@ function wireEvents(){
       document.querySelectorAll('.tab-btn[data-atrmode]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.atrStopMode = btn.dataset.atrmode;
+      markValidationStale('Risk rules changed.');
       recompute();
     });
   });
@@ -3489,14 +3819,18 @@ function wireEvents(){
       document.querySelectorAll('.tab-btn[data-volmode]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.volSizingMode = btn.dataset.volmode;
+      markValidationStale('Sizing rules changed.');
       recompute();
     });
   });
 
   ['inCapital','inFee','inSizing','inEmaFast','inEmaSlow','inMvrvLongReduce','inMvrvLongExit','inMvrvShortReduce','inMvrvShortExit','inAtrMult','inVolTarget','inSlippage','inShortCarry','inRiskFree','inDownsideTarget','inMvrvLag','inMvrvAge'].forEach(id=>{
     let t;
-    $(id).addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(recompute, 260); });
+    $(id).addEventListener('input', ()=>{if(id==='inFee'||id==='inSlippage')markExecutionCustom();markValidationStale('Backtest inputs changed.');clearTimeout(t);t=setTimeout(recompute,260);});
   });
+
+  ['inValidationSplit','inSensitivityPct','inCostStress'].forEach(id=>$(id).addEventListener('input',()=>markValidationStale('Validation settings changed.')));
+  $('runValidationBtn').addEventListener('click',runValidationSuite);
 
   // Rolling return window: doesn't touch the backtest itself, so just recompute
   // the rolling series off the already-computed equity curves and redraw the chart.
@@ -3514,7 +3848,7 @@ function wireEvents(){
   })();
 
   // A typed date intentionally selects midnight; the slider stores an exact bar.
-  (function(){let timer;$('inStartDate').addEventListener('input',()=>{state.startTimestamp=null;clearTimeout(timer);timer=setTimeout(recompute,260);});})();
+  (function(){let timer;$('inStartDate').addEventListener('input',()=>{state.startTimestamp=null;markValidationStale('Backtest start changed.');clearTimeout(timer);timer=setTimeout(recompute,260);});})();
 
   // Entry date slider: instant cheap preview while dragging (no chart redraw,
   // no backtest re-run), one full recompute when you let go.
@@ -3524,6 +3858,7 @@ function wireEvents(){
     if (!sliderDragging) return;
     sliderDragging = false;
     $('entryPreviewDot').style.display = 'none';
+    markValidationStale('Backtest start changed.');
     recompute();
   };
   window.addEventListener('pointerup', endDrag);
@@ -3531,6 +3866,7 @@ function wireEvents(){
   slider.addEventListener('input', ()=>{
     const idx = Number(slider.value);
     applySliderIndex(idx, {fromSlider:false});
+    markValidationStale('Backtest start changed.');
     if (sliderDragging){
       livePreview(idx);
     } else {
@@ -3540,9 +3876,9 @@ function wireEvents(){
   });
 
   document.querySelectorAll('#timeframeGroup .pill').forEach(btn=>{
-    btn.addEventListener('click',()=>{if(btn.dataset.tf!==state.timeframe||DATA_PENDING)changeTimeframe(btn.dataset.tf);});
+    btn.addEventListener('click',()=>{if(btn.dataset.tf!==state.timeframe||DATA_PENDING){markValidationStale('Timeframe changed.');changeTimeframe(btn.dataset.tf);}});
   });
-  $('refreshDataBtn').addEventListener('click',()=>changeTimeframe(state.timeframe,true));
+  $('refreshDataBtn').addEventListener('click',()=>{markValidationStale('Dataset refreshed.');changeTimeframe(state.timeframe,true);});
 
   document.querySelectorAll('#priceRangeGroup .pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3576,16 +3912,23 @@ function wireEvents(){
   function setActiveTab(tab){
     state.activeTab = tab;
     const isBacktest = tab === 'backtest';
+    const isAnalysis = tab === 'analysis';
+    const isValidation = tab === 'validation';
     $('tabBacktest').style.display = isBacktest ? '' : 'none';
-    $('tabAnalysis').style.display = isBacktest ? 'none' : '';
+    $('tabAnalysis').style.display = isAnalysis ? '' : 'none';
+    $('tabValidation').style.display = isValidation ? '' : 'none';
     $('pageTabBacktestBtn').classList.toggle('active', isBacktest);
-    $('pageTabAnalysisBtn').classList.toggle('active', !isBacktest);
+    $('pageTabAnalysisBtn').classList.toggle('active', isAnalysis);
+    $('pageTabValidationBtn').classList.toggle('active', isValidation);
     $('pageTabBacktestBtn').setAttribute('aria-selected', isBacktest);
-    $('pageTabAnalysisBtn').setAttribute('aria-selected', !isBacktest);
-    if (!isBacktest) renderAnalysisTab();
+    $('pageTabAnalysisBtn').setAttribute('aria-selected', isAnalysis);
+    $('pageTabValidationBtn').setAttribute('aria-selected', isValidation);
+    if(isAnalysis)renderAnalysisTab();
+    if(isValidation){renderValidationDataQuality();if(lastValidation)renderValidationSuite();}
   }
   $('pageTabBacktestBtn').addEventListener('click', ()=> setActiveTab('backtest'));
   $('pageTabAnalysisBtn').addEventListener('click', ()=> setActiveTab('analysis'));
+  $('pageTabValidationBtn').addEventListener('click', ()=> setActiveTab('validation'));
 
   document.querySelectorAll('#priceScaleGroup .pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3615,6 +3958,8 @@ function wireEvents(){
   });
 
   $('exportSnapBtn').addEventListener('click', exportSnapshot);
+  $('exportRunBtn').addEventListener('click',exportRunManifest);
+  $('exportRunInlineBtn').addEventListener('click',exportRunManifest);
 
   $('themeToggle').addEventListener('click', ()=>{
     const cur = document.body.getAttribute('data-theme');
@@ -3681,6 +4026,40 @@ function updateEntryReadout(){
 /* ======================================================================
    SNAPSHOT EXPORT
 ====================================================================== */
+function scenarioManifest(run){
+  return {period:{start:RAW.dates[run.startIndex],end:RAW.dates[run.endIndex]},metrics:metricSnapshot(run.metrics),buyAndHold:metricSnapshot(run.metricsHold),costs:{fees:run.bt.totalFees,shortCarry:run.bt.totalCarry}};
+}
+function buildRunManifest(){
+  if(!lastResult)throw new Error('Run a valid backtest before exporting.');
+  const {cfg,startIndex,bt,bh,metrics,metricsHold,metricsBase}=lastResult,endIndex=RAW.dates.length-1;
+  const eligible=Math.max(0,RAW.dates.length-startIndex),mvrvAvailable=RAW.mvrv.slice(startIndex).filter(Number.isFinite).length;
+  const validationMatches=lastValidation&&!validationStale&&lastValidation.key===validationConfigKey(cfg);
+  let validation={status:lastValidation?'stale':'not_run'};
+  if(validationMatches){
+    validation={
+      status:'current',generatedAt:lastValidation.generatedAt,splitPct:lastValidation.splitPct,
+      full:scenarioManifest(lastValidation.full),earlier:scenarioManifest(lastValidation.earlier),later:scenarioManifest(lastValidation.later),
+      sensitivity:{pct:lastValidation.sensitivity.pct,commonStart:RAW.dates[lastValidation.sensitivity.commonStartIndex],positiveCagr:lastValidation.sensitivity.positive,validPairs:lastValidation.sensitivity.valid,cells:lastValidation.sensitivity.cells.map(cell=>cell.valid?{fast:cell.fast,slow:cell.slow,current:cell.current,metrics:metricSnapshot(cell.run.metrics)}:{fast:cell.fast,slow:cell.slow,current:cell.current,valid:false})},
+      costStress:{multiplier:lastValidation.costStress.multiplier,config:publicConfig(lastValidation.costStress.cfg),result:scenarioManifest(lastValidation.costStress.stressed)}
+    };
+  }
+  return {
+    schemaVersion:'btc-ema-backtest-run/v1',engineVersion:ENGINE_VERSION,generatedAt:new Date().toISOString(),
+    strategy:{name:'BTC EMA Cross',signal:'fast EMA crosses slow EMA',defaultRule:'EMA 50/200 on 4H',mode:cfg.mode},
+    executionContract:{signalInput:'completed close',fill:'next available close',lastBarSignal:'unfilled',maxExposure:1,leverage:false,cashYield:0,openPositionFinalExit:false,benchmarkFinalExit:false},
+    config:publicConfig(cfg),
+    period:{requestedStart:cfg.startDate,actualStart:RAW.dates[startIndex],end:RAW.dates[endIndex],timeframe:cfg.timeframe,bars:RAW.dates.length-startIndex},
+    data:{prices:{...DATA_META,observations:RAW.dates.length,first:RAW.dates[0],last:RAW.dates.at(-1)},mvrv:MVRV_META?{...MVRV_META,availableObservations:mvrvAvailable,eligibleObservations:eligible,coverage:eligible?mvrvAvailable/eligible:null}:null},
+    results:{strategy:metricSnapshot(metrics),buyAndHold:metricSnapshot(metricsHold),emaOnlyBaseline:metricSnapshot(metricsBase),costs:{fees:bt.totalFees,shortCarry:bt.totalCarry,buyAndHoldEntryFee:bh.entryFee},openPosition:bt.openPosition,trades:bt.trades},
+    validation
+  };
+}
+function exportRunManifest(){
+  try{
+    const manifest=buildRunManifest(),blob=new Blob([JSON.stringify(manifest,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='btc-ema-run-'+state.timeframe+'-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0);
+  }catch(error){alert(error.message);}
+}
 function drawSnapshotSparkline(canvas){
   const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);if(!lastResult)return;
   const {bt,bh,startIndex}=lastResult,strat=bt.equity.slice(startIndex),hold=bh.eq.slice(startIndex),n=strat.length;if(n<2)return;
@@ -3723,10 +4102,9 @@ function populateSnapshot(){
       + '</div>';
   }).join('');
 
-  const publicCfg=Object.fromEntries(Object.entries(cfg).filter(([k])=>k!=='atrSeries'&&k!=='volSeries'));
-  const specification={engine:ENGINE_VERSION,config:publicCfg,actualStart:RAW.dates[startIndex],end:RAW.dates[n],prices:DATA_META,mvrv:MVRV_META};
+  const specification={engine:ENGINE_VERSION,config:publicConfig(cfg),actualStart:RAW.dates[startIndex],end:RAW.dates[n],prices:DATA_META,mvrv:MVRV_META};
   $('snapshotCard').dataset.runSpec=JSON.stringify(specification);
-  $('snapSettings').textContent='Engine '+ENGINE_VERSION+' · next-close fills · capital '+fmtUSDFull(cfg.initialCapital)+' · EMA '+cfg.emaFast+'/'+cfg.emaSlow+' bars · budget '+fmtPct(cfg.sizingPct)+' (100% cap) · fee '+fmtPct(cfg.feePct)+' / fill · slippage '+fmtPct(cfg.slippagePct)+' / fill · short carry '+fmtPct(cfg.shortCarryRate)+'/yr · risk-free '+fmtPct(cfg.riskFreeRate)+'/yr · Sortino target '+fmtPct(cfg.downsideTarget)+'/yr · MVRV '+cfg.mvrv.mode+' L '+cfg.mvrv.longReduce+'/'+cfg.mvrv.longExit+' S '+cfg.mvrv.shortReduce+'/'+cfg.mvrv.shortExit+' lag '+cfg.mvrv.lagDays+'d / max age '+cfg.mvrv.maxAgeDays+'d · stop '+(cfg.atrStop.enabled?cfg.atrStop.mult+'× close proxy':'off')+' · daily-vol sizing '+(cfg.volSizing.enabled?fmtPct(cfg.volSizing.targetPct):'off')+' · prices '+(DATA_META?.hash||'unavailable')+' · MVRV '+(MVRV_META?.hash||'unavailable');
+  $('snapSettings').textContent='Engine '+ENGINE_VERSION+' · next-close fills · execution '+(EXECUTION_PRESETS[cfg.executionPreset]?.label||'Custom')+' · capital '+fmtUSDFull(cfg.initialCapital)+' · EMA '+cfg.emaFast+'/'+cfg.emaSlow+' bars · budget '+fmtPct(cfg.sizingPct)+' (100% cap) · fee '+fmtPct(cfg.feePct)+' / fill · slippage '+fmtPct(cfg.slippagePct)+' / fill · short carry '+fmtPct(cfg.shortCarryRate)+'/yr · risk-free '+fmtPct(cfg.riskFreeRate)+'/yr · Sortino target '+fmtPct(cfg.downsideTarget)+'/yr · MVRV '+cfg.mvrv.mode+' L '+cfg.mvrv.longReduce+'/'+cfg.mvrv.longExit+' S '+cfg.mvrv.shortReduce+'/'+cfg.mvrv.shortExit+' lag '+cfg.mvrv.lagDays+'d / max age '+cfg.mvrv.maxAgeDays+'d · stop '+(cfg.atrStop.enabled?cfg.atrStop.mult+'× close proxy':'off')+' · daily-vol sizing '+(cfg.volSizing.enabled?fmtPct(cfg.volSizing.targetPct):'off')+' · prices '+(DATA_META?.hash||'unavailable')+' · MVRV '+(MVRV_META?.hash||'unavailable');
   drawSnapshotSparkline($('snapChart'));
 }
 
@@ -3766,7 +4144,16 @@ async function boot(){
   if(typeof Chart==='undefined'){showRunIssue('The chart library could not load. Check the connection and reload this file.');return;}
   await changeTimeframe(state.timeframe,true);
 }
-boot();
+const engineTestHooks=globalThis.__BTC_EMA_TEST__?{
+  setTestData(data){RAW={dates:Array.from(data.dates),prices:Array.from(data.prices),mvrv:Array.from(data.mvrv||new Array(data.dates.length).fill(null))};state.timeframe=data.timeframe||'1d';},
+  computeScenario,neighborhoodValues
+}:{};
+globalThis.BtcEmaEngine=Object.freeze({
+  version:ENGINE_VERSION,parseTs,computeEMA,computeEMAFrom,generateSignals,runBacktest,buyAndHoldEquity,
+  computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,normalizePrices,normalizeMvrv,alignMvrv,
+  ...engineTestHooks
+});
+if(!globalThis.__BTC_EMA_TEST__)boot();
 
 /* ======================================================================
    SECRET COMMAND — type "iii" to snap into a preset config
@@ -3803,6 +4190,7 @@ boot();
     document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(b=>b.classList.toggle('active',b.dataset.mvrvmode==='gate'));
     document.querySelectorAll('.tab-btn[data-volmode]').forEach(b=>b.classList.toggle('active',b.dataset.volmode==='on'));
     state.startTimestamp='2021-12-16';$('inStartDate').value='2021-12-16';
+    markValidationStale('Secret preset changed the backtest.');
     if(recompute())showWelcomeBackPopup();
   }
 

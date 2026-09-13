@@ -1,87 +1,194 @@
 # BTC EMA Cross · Backtest Terminal
 
-A single-page, client-side backtesting terminal for a Bitcoin EMA(50/200) moving-average-cross strategy, with an optional MVRV valuation-regime filter layered on top.
+A client-side research terminal for Sirapob's core Bitcoin rule: EMA 50/200 on the 4-hour chart, buy after a golden cross and return to cash after a death cross.
 
 **Live demo:** https://0xtrvkc.github.io/btcEmaCrossBacktest/
 
-Everything runs in the browser — data is fetched from a public JSON dataset on page load, and the backtest math, charting, and metrics are all computed client-side. Nothing is sent to a server.
+The app runs entirely in the browser. It fetches public BTC close and MVRV data, validates the observations, calculates the strategy, and renders the report without sending portfolio settings to a server.
 
----
+## What changed in engine v3
 
-## What it does
+The research workflow was strengthened using the parts of [QuantDinger](https://github.com/OpenByteInc/QuantDinger) that fit a focused static backtester:
 
-The tool lets you configure and run a long/short EMA-crossover strategy against historical BTC/USD price data, then inspect the results through an interactive dashboard: price chart with signal markers, equity curve vs. buy-and-hold, drawdown and trade statistics, a trade log, and an on-chain MVRV valuation overlay.
+- explicit Exploration, Live-aligned, and Custom execution-cost presets;
+- a Validation tab with chronological holdout, EMA-neighborhood sensitivity, and execution-cost stress checks;
+- a versioned JSON run manifest containing settings, assumptions, results, trades, source URLs, and dataset hashes;
+- deterministic engine tests and a Node.js 24 GitHub Actions workflow;
+- clearer separation between research assumptions and observed market data.
 
-### Core strategy — EMA cross
-- Two exponential moving averages (**EMA Fast**, default 50, and **EMA Slow**, default 200) are computed on the price series.
-- A **buy ("golden cross")** signal fires when the fast EMA crosses above the slow EMA; a **sell ("death cross")** signal fires when it crosses back below.
-- EMAs are seeded with a simple moving average over the first *N* bars, then computed recursively.
-- Three trading modes: **Buy Only**, **Short Only**, or **Buy & Short** (reverses position on every cross instead of just flattening).
+The app deliberately does not copy QuantDinger's broker execution, accounts, database, workers, AI layer, or full-stack infrastructure. Those would add complexity without improving this repo's purpose.
 
-### MVRV regime filter (optional)
-An overlay based on MVRV (market value / realized value — an on-chain cost-basis ratio) that can gate or scale position sizing independently of the price-derived EMA signal:
-- **Off** — pure EMA-cross strategy.
-- **Gate** — blocks new entries once MVRV passes a "Reduce" threshold, and force-exits any open position once MVRV passes an "Exit" threshold (checked every bar, so it can act ahead of a lagging EMA cross).
-- **Scale** — replaces the hard gate with a linear taper of position size between the Reduce and Exit thresholds.
-- Separate thresholds for long-side euphoria (default Reduce 2.0 / Exit 3.0) and short-side capitulation (default Reduce 1.2 / Exit 0.7), calibrated against the four completed BTC halving cycles.
-- Every recompute also silently runs an EMA-only baseline (filter forced off) over the same window, shown separately as **Filter Impact**, to isolate what the MVRV overlay is actually contributing.
+## Default research setup
 
-### Entry Date Simulator
-A draggable slider lets you pick any historical date as a hypothetical entry point and see price at entry vs. now, days held, return, and the EMA trend state at that moment — independent of the full backtest run.
+| Setting | Default |
+|---|---:|
+| Timeframe | 4H |
+| Strategy | Buy Only |
+| Fast / slow EMA | 50 / 200 bars |
+| Position budget | 100% of available cash |
+| MVRV filter | Off |
+| ATR trailing stop | Off |
+| Volatility-targeted sizing | Off |
+| Execution preset | Live-aligned |
+| Fee per fill | 0.05% |
+| Adverse slippage per fill | 0.05% |
+| Leverage | None; exposure is capped at 100% |
 
-### Configurable inputs
-| Setting | Description |
-|---|---|
-| Initial Capital | Starting USD portfolio value |
-| Fee / Trade | Round-trip friction, applied on both entry and exit notional |
-| Sizing / Trade | % of current equity committed per position (remainder sits in uninvested cash) |
-| EMA Fast / EMA Slow | Lookback periods in days |
-| Backtest Start | Earliest allowed start date (actual start is this date or whenever the slow EMA first becomes valid, whichever is later) |
-| Timeframe | 1H / 4H / 1D price granularity |
+### Execution presets
 
-### Dashboard panels
-- **Ticker strip** — live price, EMA fast/slow, current signal state, MVRV zone.
-- **Price · EMA Cross · Signal Markers chart** — linear/log scale, selectable range (6M–All), halving-date markers.
-- **MVRV Valuation chart** — MVRV series with the configured Reduce/Exit threshold lines.
-- **Portfolio Growth** — strategy equity vs. buy-and-hold benchmark, linear/log.
-- **Performance Metrics** — return profile, trade statistics, drawdown analysis, timing & streaks, and MVRV filter impact.
-- **Rolling 1Y Return** — trailing 365-day return, strategy vs. buy-and-hold.
-- **Holding vs. Trading** — net worth comparison and BTC-denominated gain/loss vs. a simple buy-and-hold of the initial capital.
-- **Trade Log** — full list of entries/exits with side, dates, prices, hold time, return, and P&L.
+| Preset | Fee / fill | Slippage / fill | Purpose |
+|---|---:|---:|---|
+| Exploration | 0.05% | 0.00% | Explore the rule with commission but no assumed price impact |
+| Live-aligned | 0.05% | 0.05% | More conservative default inspired by QuantDinger's live-aligned backtest contract |
+| Custom | User input | User input | Test a specific venue or stress assumption |
 
----
+Preset values are transparent inputs. Changing either cost field away from a known preset switches the label to Custom; it never silently overwrites a manual value.
 
-## Data & execution assumptions
+## Strategy and execution contract
 
-- **Data source:** [`0xtrvkc/dynamic-btc-analytics-dashboard`](https://github.com/0xtrvkc/dynamic-btc-analytics-dashboard) on GitHub — BTC/USD price series (1h/4h/1d) and MVRV, fetched fresh on load and re-run automatically against new data.
-- **Fills:** trades execute at the closing price of the signal (or force-exit) bar — no next-bar delay, no slippage beyond the fee input.
-- **Shorts:** modeled with linear, non-levered payoff (position value moves inversely to price return) — a simplification of real margin/funding mechanics.
-- **Drawdown:** computed on the daily mark-to-market equity curve against its running all-time high.
-- **Cash:** the uninvested portion of equity earns 0%.
+1. Fast and slow EMAs are seeded with an SMA over their first complete lookback windows.
+2. A signal requires a strict cross. Touching the other EMA is not a cross.
+3. The decision uses a completed close.
+4. The order fills at the next available close with the configured adverse slippage and fee.
+5. A signal on the final loaded bar remains unfilled.
+6. Buy Only starts a long after a golden cross and exits after a death cross. It does not open a short.
+7. Backtests start in cash and wait for a new crossover; they do not assume a position from a signal that occurred before the selected start.
+8. Position cost, including the entry fee, must fit within available cash. Exposure is capped at 100%.
+9. An open position is marked to the final close. The engine does not invent a final liquidation or exit fee.
 
-> Historical backtest performance is not indicative of future results. This tool is for research and education only and is **not investment advice**.
+Short Only and Buy & Short are available as research modes. Shorts use fixed BTC quantity and linear USD P&L, with optional annual carry. This is not a margin, liquidation, or historical funding-rate simulator.
 
----
+## Validation Lab
 
-## Tech stack
+One good equity curve can be luck or parameter selection. The Validation tab challenges the current setup without changing its rule.
 
-- Vanilla HTML/CSS/JavaScript — no build step, no framework.
-- [Chart.js 4](https://www.chartjs.org/) for all charts.
-- Google Fonts (Inter, JetBrains Mono).
-- Dark/light theme toggle, fully responsive layout.
+### 1. Chronological holdout
 
-## Running locally
+- Splits the selected history by elapsed time, 70% earlier and 30% later by default.
+- Never shuffles observations.
+- Resets each block to the same starting capital and waits for the next cross.
+- Reports full, earlier, and later CAGR, drawdown, Sharpe, profit factor, win rate, and trade count.
+- EMA values at every bar use current and earlier prices only.
 
-This is a single static file — no build or server required.
+This is a fixed-rule time split. It becomes a true out-of-sample test only if the EMA and filter settings were chosen without inspecting the later block.
+
+### 2. EMA parameter neighborhood
+
+- Tests a 3×3 grid around the selected fast and slow periods; the default radius is ±20%.
+- Uses one common start date based on the longest slow EMA in the grid, so longer lookbacks do not receive a different test window.
+- Shows CAGR, maximum drawdown, final equity, profit factor, and trade count for each valid pair.
+
+A broad region of similar results is more reassuring than one isolated winning pair. It still does not prove future predictive power.
+
+### 3. Execution-cost stress
+
+- Multiplies fee, adverse slippage, and short carry together; 2× is the default.
+- Leaves signals, MVRV rules, stops, and sizing unchanged.
+- Compares final equity, CAGR, maximum drawdown, Sharpe, and explicit fees plus carry.
+
+Slippage is a scenario assumption embedded in execution prices. It is not reconstructed from historical spreads or an order book.
+
+## MVRV and risk overlays
+
+### MVRV regime filter
+
+- **Off:** pure EMA strategy.
+- **Gate:** blocks a new position beyond the Reduce threshold and queues an exit beyond the Exit threshold.
+- **Scale:** tapers the size of a new entry between Reduce and Exit.
+- Daily MVRV receives a configurable publication delay and becomes unavailable after a configurable maximum age.
+- Missing or stale MVRV blocks a new filtered entry and queues the exit of an open filtered position.
+- Every filtered run is compared with the same setup with MVRV disabled, isolating the filter's contribution.
+
+### Risk controls
+
+- Optional close-based Wilder volatility trailing stop. It is not textbook ATR because the feed contains no high/low observations.
+- Optional volatility-targeted sizing using 14 complete UTC daily returns.
+- Configurable risk-free rate for Sharpe and target return for Sortino.
+- No leverage and no exposure above available cash.
+
+## Reports and metrics
+
+The terminal includes:
+
+- price, EMA, crossover, fill, halving, and MVRV regime visualization;
+- strategy equity against fee-adjusted buy and hold;
+- bar-level and rolling drawdown;
+- drawdown episodes, recovery requirements, and time underwater;
+- CAGR, full-calendar-year mean return, Sharpe, Sortino, Calmar, and Ulcer Index;
+- profit factor, win rate, streaks, holding time, realized P&L, and open P&L;
+- monthly return and underwater heatmaps;
+- trade P&L distribution and holding-time scatter;
+- full trade log with signal dates, execution dates, fees, carry, and exit reasons;
+- RSI, MACD, Kaufman efficiency ratio, close-based volatility, and Bollinger analysis;
+- JPG summary snapshot and machine-readable JSON run export.
+
+Risk-adjusted statistics use complete, consecutive UTC daily observations. Missing or partial daily intervals are excluded rather than fabricated. Square-root annualization does not correct serial dependence or establish statistical significance.
+
+## Reproducible run JSON
+
+Use **Run JSON** in the header or Validation tab. Each export includes:
+
+- schema and engine versions;
+- the complete public configuration;
+- requested and actual dates;
+- next-close, no-leverage, and open-position valuation assumptions;
+- price and MVRV source metadata and SHA-256 content hashes when supported;
+- strategy, buy-and-hold, and EMA-only baseline metrics;
+- costs, open position, and closed trade records;
+- current validation results, or a stale/not-run status.
+
+The source hash makes it possible to tell whether two apparently identical runs used identical fetched bytes.
+
+## Data and future updates
+
+Price and MVRV data come from [`0xtrvkc/dynamic-btc-analytics-dashboard`](https://github.com/0xtrvkc/dynamic-btc-analytics-dashboard):
+
+- `btc_1h_price.json`
+- `btc_4h_price.json`
+- `btc_daily_price.json`
+- `mvrv.json`
+
+The latest files are fetched when the page loads, when the timeframe changes, or when Refresh is pressed. The page does not stream live prices. New valid observations and future cycles are consumed automatically; no hard-coded final date is used.
+
+Validation rejects non-positive prices, malformed timestamps, off-grid bars, invalid MVRV values, and conflicting duplicate MVRV observations. Missing expected price bars are counted and disclosed. They are not forward-filled.
+
+## Run locally
 
 ```bash
 git clone https://github.com/0xtrvkc/btcEmaCrossBacktest.git
 cd btcEmaCrossBacktest
-open index.html   # or just double-click it / serve with any static file server
+python3 -m http.server 8000
 ```
 
-Since data is fetched via `fetch()` from GitHub, opening the file directly (`file://`) will generally work, but serving it locally (e.g. `python3 -m http.server`) avoids any browser CORS/file-protocol quirks.
+Open `http://localhost:8000`. Serving the directory avoids file-protocol and cross-origin quirks.
+
+## Test the engine
+
+Node.js 24 is used in CI, with no package installation required:
+
+```bash
+node --test tests/*.test.mjs
+```
+
+The contract tests cover SMA-seeded EMA values, strict crossover detection, next-close execution, fee/slippage accounting, MVRV availability delay, timestamp-grid validation, and drawdown math.
+
+## Repository layout
+
+```text
+index.html                         Browser application and versioned engine
+readme.md                          Methodology and usage guide
+tests/engine.test.mjs              Deterministic engine contract tests
+.github/workflows/engine-ci.yml    Node.js 24 CI
+.github/dependabot.yml             Monthly GitHub Actions maintenance
+```
+
+## Limitations
+
+- Close-only data cannot reproduce intrabar stops, bid/ask spreads, market impact, partial fills, latency, or order-book capacity.
+- Short carry is a user-defined annual rate, not historical exchange funding.
+- MVRV publication timing depends on the upstream source; the configured lag is a research assumption.
+- Backtests describe a historical rule. They do not establish causality, statistical significance, or future returns.
 
 ## Disclaimer
 
-This project is provided for educational and research purposes only. Nothing in this repository or the deployed tool constitutes financial or investment advice. Past performance, whether real or backtested, does not guarantee future results.
+For research and education only. Historical and simulated results are not investment advice and do not guarantee future performance.
