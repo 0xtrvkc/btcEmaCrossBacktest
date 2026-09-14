@@ -4436,6 +4436,61 @@ if(!globalThis.__BTC_EMA_TEST__)boot();
     }
   });
 
+  /* ---- mobile-friendly trigger: long-press (3s) on the "Buy Only" tab ---- */
+  (function(){
+    const HOLD_MS = 3000;
+    const btn = document.querySelector('.tab-btn[data-mode="buyonly"]');
+    if (!btn) return;
+
+    let holdTimer = null, firedByHold = false, startX = 0, startY = 0;
+    const MOVE_TOLERANCE = 12; // px — cancel if finger drags away (scrolling)
+
+    function start(x, y){
+      firedByHold = false;
+      startX = x; startY = y;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(()=>{
+        firedByHold = true;
+        if (navigator.vibrate) navigator.vibrate(20);
+        activateSecretPreset();
+      }, HOLD_MS);
+    }
+    function cancel(){
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    function move(x, y){
+      if (Math.abs(x-startX) > MOVE_TOLERANCE || Math.abs(y-startY) > MOVE_TOLERANCE) cancel();
+    }
+
+    btn.addEventListener('touchstart', (e)=>{
+      const t = e.touches[0];
+      start(t.clientX, t.clientY);
+    }, {passive:true});
+    btn.addEventListener('touchmove', (e)=>{
+      const t = e.touches[0];
+      move(t.clientX, t.clientY);
+    }, {passive:true});
+    btn.addEventListener('touchend', cancel);
+    btn.addEventListener('touchcancel', cancel);
+
+    // Also support mouse (desktop click-and-hold), without breaking the normal click.
+    btn.addEventListener('mousedown', (e)=> start(e.clientX, e.clientY));
+    btn.addEventListener('mousemove', (e)=>{ if (holdTimer) move(e.clientX, e.clientY); });
+    btn.addEventListener('mouseup', cancel);
+    btn.addEventListener('mouseleave', cancel);
+
+    // If the hold fired the preset, swallow the resulting click so it doesn't
+    // also flip the strategy mode to "Buy Only" right after the popup.
+    btn.addEventListener('click', (e)=>{
+      if (firedByHold){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        firedByHold = false;
+      }
+    }, true);
+  })();
+
   function activateSecretPreset(){
     state.mvrvMode='gate';state.volSizingMode='on';
     document.querySelectorAll('.tab-btn[data-mvrvmode]').forEach(b=>b.classList.toggle('active',b.dataset.mvrvmode==='gate'));
