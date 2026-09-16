@@ -151,7 +151,7 @@ The terminal includes:
 - drawdown episodes, recovery requirements, and time underwater;
 - CAGR, full-calendar-year mean return, Sharpe, Sortino, Calmar, and Ulcer Index;
 - profit factor, win rate, streaks, holding time, realized P&L, and open P&L;
-- monthly return and underwater heatmaps;
+- monthly return heatmap with month-end floating P&L and open/close trade markers, plus an underwater heatmap;
 - trade P&L distribution and holding-time scatter;
 - full trade log with signal dates, execution dates, fees, carry, and exit reasons;
 - modeled call/put delta at each entry plus full historical open-to-checkpoint delta cases;
