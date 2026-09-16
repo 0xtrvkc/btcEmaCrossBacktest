@@ -87,6 +87,26 @@ test('fees and adverse slippage reconcile to final equity',()=>{
   assert.ok(Math.abs(result.equity.at(-1)-(cfg.initialCapital+result.trades[0].pnlDollar))<1e-9);
 });
 
+test('floating P&L and open/close events remain aligned to execution bars and months',()=>{
+  const dates=['2026-01-30','2026-01-31','2026-02-01','2026-02-02','2026-02-03'];
+  const prices=[10,11,12,15,14];
+  const result=engine.runBacktest(dates,prices,new Array(dates.length).fill(null),[{index:1,type:'buy'},{index:3,type:'sell'}],baseConfig(),0);
+  assert.equal(result.floatingPnl[2],0);
+  assert.equal(result.floatingPnl[3],250);
+  assert.equal(result.floatingPnl[4],null);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.markers.map(({index,kind,side})=>({index,kind,side})))),[
+    {index:2,kind:'open',side:'long'},
+    {index:4,kind:'close',side:'long'}
+  ]);
+  const contexts=engine.monthlyTradeContexts(dates,result.floatingPnl,result.markers,0);
+  assert.equal(contexts.get('2026-01').floatingPnl,null);
+  assert.equal(contexts.get('2026-02').floatingPnl,null);
+  assert.deepEqual(JSON.parse(JSON.stringify(contexts.get('2026-02').events.map(({kind,date})=>({kind,date})))),[
+    {kind:'open',date:'2026-02-01'},
+    {kind:'close',date:'2026-02-03'}
+  ]);
+});
+
 test('MVRV becomes usable only after lag and expires by source age',()=>{
   const dates=['2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05'];
   const records=[{observedAt:Date.UTC(2026,0,1),value:1.25}];
