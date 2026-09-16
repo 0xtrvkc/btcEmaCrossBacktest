@@ -100,7 +100,9 @@ test('floating P&L and open/close events remain aligned to execution bars and mo
   ]);
   const contexts=engine.monthlyTradeContexts(dates,result.floatingPnl,result.markers,0);
   assert.equal(contexts.get('2026-01').floatingPnl,null);
+  assert.equal(contexts.get('2026-01').hadPosition,false);
   assert.equal(contexts.get('2026-02').floatingPnl,null);
+  assert.equal(contexts.get('2026-02').hadPosition,true);
   assert.deepEqual(JSON.parse(JSON.stringify(contexts.get('2026-02').events.map(({kind,date})=>({kind,date})))),[
     {kind:'open',date:'2026-02-01'},
     {kind:'close',date:'2026-02-03'}

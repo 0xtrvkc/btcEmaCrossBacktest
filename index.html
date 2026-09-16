@@ -1948,14 +1948,15 @@ function monthlyTradeContexts(dates,floatingPnl,markers,startIndex){
   for(let i=startIndex;i<dates.length;i++){
     const key=parseTs(dates[i]).toISOString().slice(0,7);
     let context=contexts.get(key);
-    if(!context){context={lastIndex:i,floatingPnl:null,events:[]};contexts.set(key,context);}
+    if(!context){context={lastIndex:i,floatingPnl:null,hadPosition:false,events:[]};contexts.set(key,context);}
     context.lastIndex=i;
+    if(Number.isFinite(floatingPnl?.[i]))context.hadPosition=true;
     context.floatingPnl=Number.isFinite(floatingPnl?.[i])?floatingPnl[i]:null;
   }
   for(const marker of markers||[]){
     if(!Number.isInteger(marker.index)||marker.index<startIndex||marker.index>=dates.length)continue;
     const key=parseTs(dates[marker.index]).toISOString().slice(0,7),context=contexts.get(key);
-    if(context)context.events.push({...marker,date:dates[marker.index]});
+    if(context){context.hadPosition=true;context.events.push({...marker,date:dates[marker.index]});}
   }
   return contexts;
 }
@@ -3581,17 +3582,18 @@ function renderMonthlyHeatmap(){
     if(!rec||!Number.isFinite(rec.value))return '<td class="hm-cell empty">·</td>';
     const r=rec.value,bg=hexAlpha(themeVar(r>=0?'--green':'--red'),.28+.62*Math.min(1,Math.abs(r)/maxAbs));
     if(year)return '<td class="hm-cell hm-year-total" style="background:'+bg+';color:var(--text)" title="'+escAttr(rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':''))+'"><span class="hm-return">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</span></td>';
-    const context=monthContexts.get(rec.key)||{floatingPnl:null,events:[]},opens=context.events.filter(e=>e.kind==='open'),closes=context.events.filter(e=>e.kind==='close');
-    const classes=['hm-cell',opens.length?'has-open':'',closes.length?'has-close':''].filter(Boolean).join(' '),floating=context.floatingPnl;
+    const context=monthContexts.get(rec.key)||{floatingPnl:null,hadPosition:false,events:[]},opens=context.events.filter(e=>e.kind==='open'),closes=context.events.filter(e=>e.kind==='close');
+    const classes=['hm-cell',context.hadPosition?'':'neutral',opens.length?'has-open':'',closes.length?'has-close':''].filter(Boolean).join(' '),floating=context.floatingPnl;
     const eventText=context.events.map(e=>(e.kind==='open'?'opened ':'closed ')+(e.side||'position')+' on '+e.date).join('; ');
     const title=rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':'')+' · month-end floating P&L '+(floating==null?'—':fmtSignedUSD(floating))+(eventText?' · '+eventText:'');
     const eventBadges=opens.map(()=>'<span class="hm-event open">O</span>').concat(closes.map(()=>'<span class="hm-event close">C</span>')).join('');
-    return '<td class="'+classes+'" style="background:'+bg+';color:var(--text)" title="'+escAttr(title)+'"><span class="hm-return">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</span><span class="hm-detail"><span class="hm-float">F '+(floating==null?'—':fmtSignedUSD(floating))+'</span>'+(eventBadges?'<span class="hm-events">'+eventBadges+'</span>':'')+'</span></td>';
+    const style=context.hadPosition?'background:'+bg+';color:var(--text)':'';
+    return '<td class="'+classes+'" style="'+style+'" title="'+escAttr(title+(context.hadPosition?'':' · no position held during month'))+'"><span class="hm-return">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</span><span class="hm-detail"><span class="hm-float">F '+(floating==null?'—':fmtSignedUSD(floating))+'</span>'+(eventBadges?'<span class="hm-events">'+eventBadges+'</span>':'')+'</span></td>';
   }
   let html='<table class="heatmap-table"><thead><tr><th class="hm-year-h">Year</th>'+names.map(n=>'<th>'+n+'</th>').join('')+'<th>Year / YTD</th></tr></thead><tbody>';
   for(const y of yearly){html+='<tr><td class="hm-year">'+y.key+'</td>';for(let m=1;m<=12;m++)html+=cell(monthMap.get(y.key+'-'+String(m).padStart(2,'0')));html+=cell(y,true)+'</tr>';}
   wrap.innerHTML=html+'</tbody></table>';
-  $('heatmapLegend').innerHTML='<div class="legend-item">Returns in % · <b>F</b> month-end floating P&amp;L · <span class="hm-event open">O</span> opened · <span class="hm-event close">C</span> closed</div><div class="legend-item" style="color:var(--text-faint)">* partial month or year · hover for execution dates · year totals compound from the prior year-end or initial capital</div>';
+  $('heatmapLegend').innerHTML='<div class="legend-item">Returns in % · grey = no position held that month · <b>F</b> month-end floating P&amp;L · <span class="hm-event open">O</span> opened · <span class="hm-event close">C</span> closed</div><div class="legend-item" style="color:var(--text-faint)">* partial month or year · hover for execution dates · year totals compound from the prior year-end or initial capital</div>';
 }
 
 /* ======================================================================
