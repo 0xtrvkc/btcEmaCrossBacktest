@@ -321,12 +321,24 @@ button, .icon-btn, .pill, .tab-btn, .toggle-log{-webkit-tap-highlight-color:tran
   text-align:center; font-size:11px; font-weight:700; border-radius:6px; padding:9px 4px;
   min-width:52px; color:#0a0e14; transition:.15s; cursor:default;
 }
+.hm-return{display:block; line-height:1.15;}
+.hm-detail{display:flex; align-items:center; justify-content:center; gap:3px; min-height:13px; margin-top:4px; font-size:8px; line-height:1; white-space:nowrap;}
+.hm-float{padding:2px 3px; border-radius:3px; background:rgba(10,14,20,.16);}
+.hm-events{display:inline-flex; gap:2px;}
+.hm-event{display:inline-grid; place-items:center; width:13px; height:13px; border-radius:3px; color:#fff; font-size:8px; font-weight:900;}
+.hm-event.open{background:#2478d4;}
+.hm-event.close{background:#8250df;}
+.hm-cell.has-open{box-shadow:inset 0 2px 0 #2478d4;}
+.hm-cell.has-close{box-shadow:inset 0 -2px 0 #8250df;}
+.hm-cell.has-open.has-close{box-shadow:inset 0 2px 0 #2478d4,inset 0 -2px 0 #8250df;}
 .hm-cell.empty{background:var(--surface-2); color:var(--text-faint); font-weight:500; opacity:.4;}
 .hm-cell.neutral{background:var(--surface-2); color:var(--text-dim);}
 .hm-cell:hover{transform:scale(1.06); box-shadow:0 2px 8px rgba(0,0,0,.25); position:relative; z-index:2;}
 .hm-year-total{font-weight:800; border-left:2px solid var(--border);}
 @media(max-width:640px){
   .hm-cell{min-width:40px; font-size:10px; padding:7px 2px;}
+  .hm-detail{gap:2px; font-size:7.5px;}
+  .hm-float{padding:2px;}
   .heatmap-table{border-spacing:2px;}
 }
 
@@ -1675,7 +1687,7 @@ function buildTrade(entry, exit, exitAmt){
 }
 
 function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
-  const n=dates.length, equity=new Array(n).fill(null), sigMap=new Map(signals.map(s=>[s.index,s.type]));
+  const n=dates.length, equity=new Array(n).fill(null), floatingPnl=new Array(n).fill(null), sigMap=new Map(signals.map(s=>[s.index,s.type]));
   if(n!==prices.length || n!==mvrv.length || startIndex<0 || startIndex>=n) throw new Error('Invalid backtest data range.');
   if(!Number.isFinite(cfg.initialCapital)||cfg.initialCapital<=0||!Number.isFinite(cfg.feePct)||cfg.feePct<0||cfg.feePct>.1||!Number.isFinite(cfg.sizingPct)||cfg.sizingPct<=0||cfg.sizingPct>1) throw new Error('Invalid capital, fees, or sizing.');
   const mcfg=cfg.mvrv||{mode:'off'}, acfg=cfg.atrStop||{enabled:false,mult:3}, vcfg=cfg.volSizing||{enabled:false};
@@ -1689,7 +1701,7 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     const exitAmt=sleeveValue(px)-fee;
     const t=buildTrade(entry,{date:dates[i],price:px,fee,signalDate:dates[decisionIndex]},exitAmt);
     t.exitReason=reason;trades.push(t);cash+=exitAmt;totalFees+=fee;
-    markers.push({index:i,action:side==='long'?'sell':'buy',reason,signalIndex:decisionIndex});
+    markers.push({index:i,kind:'close',side,action:side==='long'?'sell':'buy',reason,signalIndex:decisionIndex});
     entry=null;stopPrice=null;trailExtreme=null;
   }
   function tryOpen(i,side,decisionIndex){
@@ -1706,7 +1718,7 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     entry={index:i,date:dates[i],signalDate:dates[decisionIndex],price:px,amount:budget,notional,quantity:notional/px,entryFee:fee,carry:0,side};
     cash-=budget;if(Math.abs(cash)<cfg.initialCapital*1e-12)cash=0;totalFees+=fee;
     trailExtreme=prices[i];stopPrice=null;
-    markers.push({index:i,action:side==='long'?'buy':'sell',signalIndex:decisionIndex});
+    markers.push({index:i,kind:'open',side,action:side==='long'?'buy':'sell',signalIndex:decisionIndex});
   }
   for(let i=startIndex;i<n;i++){
     if(!(Number.isFinite(prices[i])&&prices[i]>0))throw new Error('Invalid price in backtest.');
@@ -1728,6 +1740,7 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     if(!entry&&value<=0)halted=true;
     if(!Number.isFinite(value))throw new Error('Equity overflow: data or settings exceed numeric limits.');
     equity[i]=value;
+    if(entry)floatingPnl[i]=sleeveValue(prices[i])-entry.amount-entry.carry;
     if(halted||i===n-1)continue;
     let exitReason=null;
     if(entry){
@@ -1754,7 +1767,7 @@ function runBacktest(dates, prices, mvrv, signals, cfg, startIndex){
     if(close||open)pending={close,open,reason:'signal',decisionIndex:i};
   }
   const openPosition=entry?{...entry,marketValue:sleeveValue(prices[n-1]),unrealizedPnl:sleeveValue(prices[n-1])-entry.amount-entry.carry,stopPrice}:null;
-  return {equity,trades,markers,openPosition,finalPosition:entry?entry.side:null,finalCash:cash,totalFees,totalCarry,halted,insolvent:equity[n-1]<=0};
+  return {equity,floatingPnl,trades,markers,openPosition,finalPosition:entry?entry.side:null,finalCash:cash,totalFees,totalCarry,halted,insolvent:equity[n-1]<=0};
 }
 
 function buyAndHoldEquity(dates,prices,cfg,startIndex){
@@ -1928,6 +1941,23 @@ function calendarReturns(dates,equity,startIndex,initialCapital,timeframe='1d',p
     rec.value=rec.opening>0?rec.closing/rec.opening-1:null;
   }
   return records;
+}
+
+function monthlyTradeContexts(dates,floatingPnl,markers,startIndex){
+  const contexts=new Map();
+  for(let i=startIndex;i<dates.length;i++){
+    const key=parseTs(dates[i]).toISOString().slice(0,7);
+    let context=contexts.get(key);
+    if(!context){context={lastIndex:i,floatingPnl:null,events:[]};contexts.set(key,context);}
+    context.lastIndex=i;
+    context.floatingPnl=Number.isFinite(floatingPnl?.[i])?floatingPnl[i]:null;
+  }
+  for(const marker of markers||[]){
+    if(!Number.isInteger(marker.index)||marker.index<startIndex||marker.index>=dates.length)continue;
+    const key=parseTs(dates[marker.index]).toISOString().slice(0,7),context=contexts.get(key);
+    if(context)context.events.push({...marker,date:dates[marker.index]});
+  }
+  return contexts;
 }
 
 function computeRiskAdjustedMetrics(dates,equity,startIndex,cagr,maxDrawdown,cfg={}){
@@ -3545,17 +3575,23 @@ function renderMonthlyHeatmap(){
   const months=calendarReturns(RAW.dates,bt.equity,startIndex,cfg.initialCapital,cfg.timeframe,'month');
   const yearly=calendarReturns(RAW.dates,bt.equity,startIndex,cfg.initialCapital,cfg.timeframe,'year');
   if(!months.length){wrap.textContent='No monthly returns available.';return;}
-  const monthMap=new Map(months.map(r=>[r.key,r])),names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthMap=new Map(months.map(r=>[r.key,r])),monthContexts=monthlyTradeContexts(RAW.dates,bt.floatingPnl,bt.markers,startIndex),names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const maxAbs=Math.max(.02,finiteMax(months.concat(yearly).map(r=>Math.abs(r.value)),.02));
   function cell(rec,year=false){
     if(!rec||!Number.isFinite(rec.value))return '<td class="hm-cell empty">·</td>';
     const r=rec.value,bg=hexAlpha(themeVar(r>=0?'--green':'--red'),.28+.62*Math.min(1,Math.abs(r)/maxAbs));
-    return '<td class="hm-cell '+(year?'hm-year-total':'')+'" style="background:'+bg+';color:var(--text)" title="'+escAttr(rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':''))+'">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</td>';
+    if(year)return '<td class="hm-cell hm-year-total" style="background:'+bg+';color:var(--text)" title="'+escAttr(rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':''))+'"><span class="hm-return">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</span></td>';
+    const context=monthContexts.get(rec.key)||{floatingPnl:null,events:[]},opens=context.events.filter(e=>e.kind==='open'),closes=context.events.filter(e=>e.kind==='close');
+    const classes=['hm-cell',opens.length?'has-open':'',closes.length?'has-close':''].filter(Boolean).join(' '),floating=context.floatingPnl;
+    const eventText=context.events.map(e=>(e.kind==='open'?'opened ':'closed ')+(e.side||'position')+' on '+e.date).join('; ');
+    const title=rec.key+': '+fmtSignedPct(r)+(rec.partial?' (partial period)':'')+' · month-end floating P&L '+(floating==null?'—':fmtSignedUSD(floating))+(eventText?' · '+eventText:'');
+    const eventBadges=opens.map(()=>'<span class="hm-event open">O</span>').concat(closes.map(()=>'<span class="hm-event close">C</span>')).join('');
+    return '<td class="'+classes+'" style="background:'+bg+';color:var(--text)" title="'+escAttr(title)+'"><span class="hm-return">'+(r>=0?'+':'')+(r*100).toFixed(1)+(rec.partial?'*':'')+'</span><span class="hm-detail"><span class="hm-float">F '+(floating==null?'—':fmtSignedUSD(floating))+'</span>'+(eventBadges?'<span class="hm-events">'+eventBadges+'</span>':'')+'</span></td>';
   }
   let html='<table class="heatmap-table"><thead><tr><th class="hm-year-h">Year</th>'+names.map(n=>'<th>'+n+'</th>').join('')+'<th>Year / YTD</th></tr></thead><tbody>';
   for(const y of yearly){html+='<tr><td class="hm-year">'+y.key+'</td>';for(let m=1;m<=12;m++)html+=cell(monthMap.get(y.key+'-'+String(m).padStart(2,'0')));html+=cell(y,true)+'</tr>';}
   wrap.innerHTML=html+'</tbody></table>';
-  $('heatmapLegend').textContent='Values in % · first period includes entry costs · * partial month or year · year totals compound from the prior year-end or initial capital.';
+  $('heatmapLegend').innerHTML='<div class="legend-item">Returns in % · <b>F</b> month-end floating P&amp;L · <span class="hm-event open">O</span> opened · <span class="hm-event close">C</span> closed</div><div class="legend-item" style="color:var(--text-faint)">* partial month or year · hover for execution dates · year totals compound from the prior year-end or initial capital</div>';
 }
 
 /* ======================================================================
@@ -4400,7 +4436,7 @@ const engineTestHooks=globalThis.__BTC_EMA_TEST__?{
 }:{};
 globalThis.BtcEmaEngine=Object.freeze({
   version:ENGINE_VERSION,parseTs,computeEMA,computeEMAFrom,generateSignals,runBacktest,buyAndHoldEquity,
-  computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,normalizePrices,normalizeMvrv,alignMvrv,
+  computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,normalizePrices,normalizeMvrv,alignMvrv,monthlyTradeContexts,
   normalCdf,blackScholesDelta,deltaUsdChange,optionDeltaSnapshot,
   ...engineTestHooks
 });
