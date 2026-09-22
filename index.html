@@ -979,6 +979,9 @@ tr:hover td{background:var(--surface-2);}
         <tbody><tr class="mt-section"><td colspan="4">Trade Statistics</td></tr></tbody>
         <tbody id="grpTrades"></tbody>
 
+        <tbody><tr class="mt-section"><td colspan="4">Kelly Sizing Diagnostic</td></tr></tbody>
+        <tbody id="grpKelly"></tbody>
+
         <tbody><tr class="mt-section"><td colspan="4">Drawdown Analysis</td></tr></tbody>
         <tbody id="grpDrawdown"></tbody>
 
@@ -1456,7 +1459,7 @@ const fmtSignedPct = (v, dp=2) => {
   return s+(v*100).toFixed(dp)+'%';
 };
 const fmtBTC = (v) => v==null||!isFinite(v) ? '—' : v.toLocaleString('en-US',{minimumFractionDigits:5,maximumFractionDigits:5})+' BTC';
-const ENGINE_VERSION = 'quant-3.1.0';
+const ENGINE_VERSION = 'quant-3.2.0';
 const DAY_MS = 86400000;
 const YEAR_DAYS = 365.25;
 const POLICY = Object.freeze({ minCagrDays:30, minRiskReturns:10, minRollingReturns:20, volDays:14, mvrvLagDays:1, mvrvMaxAgeDays:3 });
@@ -1493,6 +1496,49 @@ function lowerBound(dates, target){
   return lo;
 }
 function tradeOutcome(trade){ const tolerance=Math.max(1e-8,Math.abs(trade.entryAmount||0)*1e-10); return trade.pnlDollar>tolerance?1:trade.pnlDollar < -tolerance?-1:0; }
+
+function computeKellyAnalysis(trades, bootstrapSamples=1000){
+  const usable=trades.filter(t=>Number.isFinite(t.pnlPct)),wins=usable.filter(t=>tradeOutcome(t)===1),losses=usable.filter(t=>tradeOutcome(t)===-1);
+  const outcomes=[...wins,...losses],effectiveTrades=outcomes.length;
+  function estimate(sample){
+    const sampleWins=sample.filter(v=>v>0),sampleLosses=sample.filter(v=>v<0),n=sampleWins.length+sampleLosses.length;
+    if(!sampleWins.length||!sampleLosses.length||!n)return null;
+    const winProbability=sampleWins.length/n,averageWin=mean(sampleWins),averageLoss=Math.abs(mean(sampleLosses)),payoffRatio=averageLoss>0?averageWin/averageLoss:null;
+    if(!(payoffRatio>0))return null;
+    const raw=winProbability-(1-winProbability)/payoffRatio;
+    return {raw,constrained:Math.max(0,Math.min(1,raw)),winProbability,averageWin,averageLoss,payoffRatio};
+  }
+  const point=estimate(outcomes.map(t=>t.pnlPct));
+  let bootstrapLow=null,bootstrapHigh=null;
+  if(point&&effectiveTrades>=5&&bootstrapSamples>0){
+    // Fixed seed keeps the same historical run reproducible in UI and JSON exports.
+    let seed=2166136261>>>0;
+    for(const t of outcomes){const value=Math.round(t.pnlPct*1e9);seed=Math.imul(seed^value,16777619)>>>0;}
+    const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+    const values=[];
+    for(let b=0;b<bootstrapSamples;b++){
+      const sample=Array.from({length:outcomes.length},()=>outcomes[Math.floor(random()*outcomes.length)].pnlPct),result=estimate(sample);
+      if(result)values.push(result.constrained);
+    }
+    if(values.length>=Math.max(100,bootstrapSamples*.25)){
+      values.sort((a,b)=>a-b);
+      bootstrapLow=values[Math.floor((values.length-1)*.025)];bootstrapHigh=values[Math.floor((values.length-1)*.975)];
+    }
+  }
+  const confidence=effectiveTrades<10?'very low':effectiveTrades<30?'low':effectiveTrades<100?'moderate':'higher';
+  const sideSummary=side=>{
+    const selected=outcomes.filter(t=>t.side===side),result=estimate(selected.map(t=>t.pnlPct));
+    return {trades:selected.length,raw:result?.raw??null,constrained:result?.constrained??null};
+  };
+  return {
+    closedTrades:usable.length,effectiveTrades,breakevens:usable.length-effectiveTrades,wins:wins.length,losses:losses.length,confidence,
+    raw:point?.raw??null,constrained:point?.constrained??null,half:point?point.constrained/2:null,quarter:point?point.constrained/4:null,
+    winProbability:point?.winProbability??null,averageWin:point?.averageWin??null,averageLoss:point?.averageLoss??null,payoffRatio:point?.payoffRatio??null,
+    bootstrap95:{low:bootstrapLow,high:bootstrapHigh,samples:bootstrapSamples},
+    bySide:{long:sideSummary('long'),short:sideSummary('short')},
+    interpretation:!point?'insufficient_mixed_outcomes':point.raw<=0?'no_estimated_edge':'positive_historical_estimate'
+  };
+}
 
 function normalCdf(x){
   if(x===Infinity)return 1;if(x===-Infinity)return 0;
@@ -1992,12 +2038,13 @@ function computeMetrics(dates,prices,startIndex,equity,trades,cfg,openPosition){
   for(const t of trades){const result=tradeOutcome(t);curW=result===1?curW+1:0;curL=result===-1?curL+1:0;maxWinStreak=Math.max(maxWinStreak,curW);maxLossStreak=Math.max(maxLossStreak,curL);}
   const holds=trades.map(t=>t.holdDays),risk=computeRiskAdjustedMetrics(dates,equity,startIndex,cagr,maxDrawdown,cfg);
   const realizedPnl=trades.reduce((s,t)=>s+t.pnlDollar,0),unrealizedPnl=openPosition?.unrealizedPnl||0;
+  const kelly=computeKellyAnalysis(trades);
   return {years,cagr,annualizedReturn,completeYears:fullYears.length,finalEquity,profitFactor,winRate:trades.length?wins.length/trades.length:null,
     tradesPerYear:years>0?trades.length/years:null,totalTrades:trades.length,breakevens:breakevens.length,
     maxProfit:trades.length?finiteMax(trades.map(t=>t.pnlPct),null):null,minProfitPositive:wins.length?finiteMin(wins.map(t=>t.pnlPct),null):null,avgProfit:mean(trades.map(t=>t.pnlPct)),
     maxDrawdown,avgDrawdown:closedEps.length?mean(closedEps.map(e=>e.val)):null,minDrawdown:closedEps.length?finiteMax(closedEps.map(e=>e.val),null):null,trueDrawdown:dd[lastIdx],
     maxWinStreak,maxLossStreak,profitHold:mean(wins.map(t=>t.holdDays)),lossHold:mean(losses.map(t=>t.holdDays)),holdRange:holds.length?[finiteMin(holds),finiteMax(holds)]:null,
-    dd,eps,closedEpisodes:closedEps.length,grossProfit,grossLoss,realizedPnl,unrealizedPnl,...risk};
+    dd,eps,closedEpisodes:closedEps.length,grossProfit,grossLoss,realizedPnl,unrealizedPnl,kelly,...risk};
 }
 
 
@@ -2400,7 +2447,7 @@ function showRunIssue(message){
   lastResult=null;$('exportSnapBtn').disabled=true;$('exportRunBtn').disabled=true;$('statusLine').textContent='Results unavailable';
   const notice=$('runNotice');notice.textContent=message;notice.style.color='var(--red)';
   for(const key of Object.keys(charts)){if(charts[key]){charts[key].destroy();charts[key]=null;}}
-  for(const id of ['grpReturn','grpTrades','grpDrawdown','grpRisk','grpTiming','grpFilterImpact'])$(id).innerHTML='<tr><td colspan="4">Correct the settings or refresh the data to calculate results.</td></tr>';
+  for(const id of ['grpReturn','grpTrades','grpKelly','grpDrawdown','grpRisk','grpTiming','grpFilterImpact'])$(id).innerHTML='<tr><td colspan="4">Correct the settings or refresh the data to calculate results.</td></tr>';
   for(const id of ['heatmapWrap','ddHeatmapWrap','heatmapLegend','ddHeatmapLegend','tradeLogBody'])$(id).textContent='';
   for(const id of ['hvtStratWorth','hvtHoldWorth','hvtBtcThen','hvtBtcNow','hvtBtcGain','hvtStratSub','hvtHoldSub','hvtBtcThenSub','tuCenterPct','tuUnderwaterDays','tuAtHighDays','tuLongestEp','tuCurrentEp','ddPeakBadge']){if($(id))$(id).textContent='—';}
 }
@@ -3891,6 +3938,17 @@ function renderMetrics(){
     metricCard('Min Profit (Positive)',fmtSignedPct(m.minProfitPositive),null,'smallest winning trade',sign(m.minProfitPositive),'Smallest strictly positive net trade return.'),
     metricCard('Average Profit',fmtSignedPct(m.avgProfit),null,'mean net return, all trades',sign(m.avgProfit),'Unweighted arithmetic mean of net trade returns on each trade’s cash budget; not a portfolio return.')
   ].join('');
+  const k=m.kelly,kellyRange=k.bootstrap95.low==null?'unavailable':fmtPct(k.bootstrap95.low)+' – '+fmtPct(k.bootstrap95.high);
+  const kellyState=k.interpretation==='no_estimated_edge'?'No estimated edge':k.interpretation==='positive_historical_estimate'?'Positive historical estimate':'Needs wins and losses';
+  $('grpKelly').innerHTML=[
+    metricCard('Full Kelly (Raw)',fmtSignedPct(k.raw),null,kellyState,sign(k.raw),'Historical binary-outcome Kelly: win probability − loss probability ÷ average-win/average-loss payoff ratio. It is not an instruction to use leverage.'),
+    metricCard('Constrained Kelly',fmtPct(k.constrained),null,'limited to 0%–100%',k.constrained>0?'pos':null,'Raw Kelly clipped to this backtester’s no-leverage exposure range. A negative result becomes 0%, meaning no estimated historical edge.'),
+    metricCard('Half / Quarter Kelly',k.half==null?'—':fmtPct(k.half)+' / '+fmtPct(k.quarter),null,'fractional sizing references',null,'Fractions of constrained Kelly reduce sensitivity to estimation error. They remain diagnostics, not automatic recommendations.'),
+    metricCard('Kelly Inputs',k.winProbability==null?'—':fmtPct(k.winProbability)+' · '+k.payoffRatio.toFixed(2)+'×',null,'win probability · payoff ratio',null,'Uses closed non-breakeven trades. Average win and average loss are based on net trade returns after modeled costs.'),
+    metricCard('Bootstrap 95% Range',kellyRange,null,k.bootstrap95.samples+' deterministic resamples',null,'Percentile interval for constrained Kelly from deterministic trade-level bootstrap resampling. Wide ranges indicate unstable sizing estimates.'),
+    metricCard('Long / Short Kelly',[k.bySide.long,k.bySide.short].map(v=>v.constrained==null?'—':fmtPct(v.constrained)).join(' / '),null,k.bySide.long.trades+' long · '+k.bySide.short.trades+' short',null,'Constrained Kelly estimated separately by position side. A side needs at least one net win and one net loss before an estimate is shown.'),
+    metricCard('Estimate Confidence',k.confidence.toUpperCase(),null,k.effectiveTrades+' effective · '+k.breakevens+' breakeven',k.confidence==='higher'?'pos':k.confidence==='very low'?'neg':null,'Heuristic sample label based on non-breakeven closed trades. EMA trades can overlap market regimes and are not guaranteed independent.')
+  ].join('');
   $('grpDrawdown').innerHTML=[
     metricCard('Max Drawdown',fmtPct(m.maxDrawdown),fmtPct(h.maxDrawdown),'deepest bar-level decline','neg','Running peak starts at initial capital, so the first entry cost is included.'),
     metricCard('Min Drawdown',fmtPct(m.minDrawdown),fmtPct(h.minDrawdown),'shallowest recovered episode','neg','Recovered episodes only; unavailable until an episode recovers.'),
@@ -4297,7 +4355,7 @@ function updateEntryReadout(){
    SNAPSHOT EXPORT
 ====================================================================== */
 function scenarioManifest(run){
-  return {period:{start:RAW.dates[run.startIndex],end:RAW.dates[run.endIndex]},metrics:metricSnapshot(run.metrics),buyAndHold:metricSnapshot(run.metricsHold),costs:{fees:run.bt.totalFees,shortCarry:run.bt.totalCarry}};
+  return {period:{start:RAW.dates[run.startIndex],end:RAW.dates[run.endIndex]},metrics:metricSnapshot(run.metrics),kellySizing:run.metrics.kelly,buyAndHold:metricSnapshot(run.metricsHold),costs:{fees:run.bt.totalFees,shortCarry:run.bt.totalCarry}};
 }
 function deltaCaseManifest(deltaCase){
   return {
@@ -4331,13 +4389,13 @@ function buildRunManifest(){
     };
   }
   return {
-    schemaVersion:'btc-ema-backtest-run/v2',engineVersion:ENGINE_VERSION,generatedAt:new Date().toISOString(),
+    schemaVersion:'btc-ema-backtest-run/v3',engineVersion:ENGINE_VERSION,generatedAt:new Date().toISOString(),
     strategy:{name:'BTC EMA Cross',signal:'fast EMA crosses slow EMA',defaultRule:'EMA 50/200 on 4H',mode:cfg.mode},
     executionContract:{signalInput:'completed close',fill:'next available close',lastBarSignal:'unfilled',maxExposure:1,leverage:false,cashYield:0,openPositionFinalExit:false,benchmarkFinalExit:false},
     config:publicConfig(cfg),
     period:{requestedStart:cfg.startDate,actualStart:RAW.dates[startIndex],end:RAW.dates[endIndex],timeframe:cfg.timeframe,bars:RAW.dates.length-startIndex},
     data:{prices:{...DATA_META,observations:RAW.dates.length,first:RAW.dates[0],last:RAW.dates.at(-1)},mvrv:MVRV_META?{...MVRV_META,availableObservations:mvrvAvailable,eligibleObservations:eligible,coverage:eligible?mvrvAvailable/eligible:null}:null},
-    results:{strategy:metricSnapshot(metrics),buyAndHold:metricSnapshot(metricsHold),emaOnlyBaseline:metricSnapshot(metricsBase),costs:{fees:bt.totalFees,shortCarry:bt.totalCarry,buyAndHoldEntryFee:bh.entryFee},openPosition:bt.openPosition,trades:bt.trades},
+    results:{strategy:metricSnapshot(metrics),buyAndHold:metricSnapshot(metricsHold),emaOnlyBaseline:metricSnapshot(metricsBase),kellySizing:metrics.kelly,costs:{fees:bt.totalFees,shortCarry:bt.totalCarry,buyAndHoldEntryFee:bh.entryFee},openPosition:bt.openPosition,trades:bt.trades},
     optionsDelta:buildDeltaManifest(),
     validation
   };
@@ -4438,7 +4496,7 @@ const engineTestHooks=globalThis.__BTC_EMA_TEST__?{
 }:{};
 globalThis.BtcEmaEngine=Object.freeze({
   version:ENGINE_VERSION,parseTs,computeEMA,computeEMAFrom,generateSignals,runBacktest,buyAndHoldEquity,
-  computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,normalizePrices,normalizeMvrv,alignMvrv,monthlyTradeContexts,
+  computeDrawdown,drawdownEpisodes,dailySeries,computeRiskAdjustedMetrics,computeMetrics,computeKellyAnalysis,normalizePrices,normalizeMvrv,alignMvrv,monthlyTradeContexts,
   normalCdf,blackScholesDelta,deltaUsdChange,optionDeltaSnapshot,
   ...engineTestHooks
 });
