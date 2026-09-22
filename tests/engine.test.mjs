@@ -33,7 +33,42 @@ function baseConfig(overrides={}){
 }
 
 test('engine contract is versioned',()=>{
-  assert.equal(engine.version,'quant-3.1.0');
+  assert.equal(engine.version,'quant-3.2.0');
+});
+
+test('Kelly analysis uses net percentage wins and losses',()=>{
+  const trades=[
+    {pnlPct:.20,pnlDollar:200,entryAmount:1000},
+    {pnlPct:.10,pnlDollar:100,entryAmount:1000},
+    {pnlPct:-.10,pnlDollar:-100,entryAmount:1000},
+    {pnlPct:-.10,pnlDollar:-100,entryAmount:1000}
+  ];
+  const result=engine.computeKellyAnalysis(trades,0);
+  assert.ok(Math.abs(result.winProbability-.5)<1e-12);
+  assert.ok(Math.abs(result.payoffRatio-1.5)<1e-12);
+  assert.ok(Math.abs(result.raw-(1/6))<1e-12);
+  assert.ok(Math.abs(result.half-(1/12))<1e-12);
+  assert.ok(Math.abs(result.quarter-(1/24))<1e-12);
+});
+
+test('Kelly analysis reports no edge and respects no-leverage bounds',()=>{
+  const losing=[
+    {pnlPct:.05,pnlDollar:50,entryAmount:1000},
+    {pnlPct:-.20,pnlDollar:-200,entryAmount:1000},
+    {pnlPct:-.20,pnlDollar:-200,entryAmount:1000}
+  ];
+  const result=engine.computeKellyAnalysis(losing,0);
+  assert.ok(result.raw<0);
+  assert.equal(result.constrained,0);
+  assert.equal(result.interpretation,'no_estimated_edge');
+});
+
+test('Kelly bootstrap range is deterministic and bounded',()=>{
+  const trades=Array.from({length:40},(_,i)=>({pnlPct:i%3===0?-.08:.12,pnlDollar:i%3===0?-80:120,entryAmount:1000}));
+  const first=engine.computeKellyAnalysis(trades,300),second=engine.computeKellyAnalysis(trades,300);
+  assert.deepEqual(first.bootstrap95,second.bootstrap95);
+  assert.ok(first.bootstrap95.low>=0&&first.bootstrap95.high<=1);
+  assert.ok(first.bootstrap95.low<=first.bootstrap95.high);
 });
 
 test('literal DOM hooks exist once in the document',()=>{

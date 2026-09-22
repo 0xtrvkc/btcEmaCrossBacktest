@@ -151,6 +151,7 @@ The terminal includes:
 - drawdown episodes, recovery requirements, and time underwater;
 - CAGR, full-calendar-year mean return, Sharpe, Sortino, Calmar, and Ulcer Index;
 - profit factor, win rate, streaks, holding time, realized P&L, and open P&L;
+- Kelly sizing diagnostics using net closed-trade returns: raw, no-leverage constrained, half/quarter Kelly, deterministic bootstrap uncertainty, and sample-confidence warnings;
 - monthly return heatmap with grey inactive months, month-end floating P&L, and executed open/close markers, plus an underwater heatmap;
 - trade P&L distribution and holding-time scatter;
 - full trade log with signal dates, execution dates, fees, carry, and exit reasons;
@@ -159,6 +160,8 @@ The terminal includes:
 - JPG summary snapshot and machine-readable JSON run export.
 
 Risk-adjusted statistics use complete, consecutive UTC daily observations. Missing or partial daily intervals are excluded rather than fabricated. Square-root annualization does not correct serial dependence or establish statistical significance.
+
+Kelly figures are historical diagnostics rather than automatic position-size recommendations. They exclude open trades, ignore breakevens when estimating binary win odds, include all modeled trade costs in returns, and can remain unstable when the slow EMA rule produces few or regime-dependent trades. Negative raw Kelly is displayed as no estimated edge, while constrained Kelly is capped to the engine's 0%–100% no-leverage range.
 
 ## Reproducible run JSON
 
@@ -170,6 +173,7 @@ Use **Run JSON** in the header or Validation tab. Each export includes:
 - next-close, no-leverage, and open-position valuation assumptions;
 - price and MVRV source metadata and SHA-256 content hashes when supported;
 - strategy, buy-and-hold, and EMA-only baseline metrics;
+- the complete Kelly sizing diagnostic and bootstrap range;
 - costs, open position, and closed trade records;
 - delta model convention, assumptions, selected-entry snapshot, and historical cases;
 - current validation results, or a stale/not-run status.
