@@ -1253,7 +1253,7 @@ tr:hover td{background:var(--surface-2);}
         <div id="validationStatus" class="mono" role="status" aria-live="polite" style="font-size:11px;color:var(--text-faint);">Ready after data loads</div>
       </div>
       <div class="notes">
-        <a href="https://github.com/OpenByteInc/QuantDinger" target="_blank" rel="noopener noreferrer">QuantDinger</a> treats a backtest as a reproducible research run, not just one attractive equity curve. This lab keeps your exact EMA/MVRV/risk rules and challenges them three ways: a later time block, nearby EMA settings, and harsher execution costs.
+        <a href="https://github.com/OpenByteInc/QuantDinger" target="_blank" rel="noopener noreferrer">QuantDinger</a> treats a backtest as a reproducible research run, not just one attractive equity curve. This lab challenges your EMA/MVRV/risk rules with later data, nearby settings, and harsher costs. <a href="https://www.pybroker.com/en/latest/index.html" target="_blank" rel="noopener noreferrer">PyBroker</a> inspires the expanding walk-forward and bootstrap research below. These run locally in JavaScript; PyBroker itself is a Python framework.
       </div>
       <div class="controls-grid validation-controls">
         <div class="field">
@@ -1268,8 +1268,12 @@ tr:hover td{background:var(--surface-2);}
           <label>Cost stress <span class="info-icon" title="Multiplies fee, slippage, and short carry while leaving signals and sizing rules unchanged.">i</span></label>
           <div class="suffix-wrap"><span>×</span><input type="number" id="inCostStress" value="2" min="1" max="10" step="0.5"></div>
         </div>
+        <div class="field"><label>Walk-forward folds</label><input id="inWalkFolds" type="number" value="4" min="2" max="8" step="1"></div>
+        <div class="field"><label>Bootstrap paths</label><input id="inBootstrapPaths" type="number" value="1000" min="200" max="3000" step="100"></div>
+        <div class="field"><label>Block length · days</label><input id="inBootstrapBlock" type="number" value="7" min="1" max="60" step="1"></div>
+        <div class="field"><label>Random seed</label><input id="inBootstrapSeed" type="number" value="42" min="0" max="4294967295" step="1"></div>
         <div class="validation-actions">
-          <button class="primary-action" id="runValidationBtn" type="button">Run 3 validation checks</button>
+          <button class="primary-action" id="runValidationBtn" type="button">Run 5 validation checks</button>
         </div>
       </div>
     </div>
@@ -1347,6 +1351,24 @@ tr:hover td{background:var(--surface-2);}
         <div class="validation-card"><div class="validation-card-label">MVRV dataset hash</div><div class="validation-card-value manifest-hash" id="dqMvrvHash">—</div><div class="validation-card-sub">Included only when available</div></div>
         <div class="validation-card"><div class="validation-card-label">Engine contract</div><div class="validation-card-value" id="dqEngine">—</div><div class="validation-card-sub">Versioned assumptions in every JSON export</div></div>
       </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot"></span>04 · Expanding walk-forward</div><span class="mono" id="walkForwardMeta" style="font-size:11px;color:var(--text-faint)">Run validation to calculate</span></div>
+      <div class="notes">Each fold ranks the nearby EMA pairs on earlier data only, freezes one pair, then tests it on the next unseen block. Your configured pair remains the fixed-rule control. Initial training uses the earlier-period share above; test folds divide the remaining elapsed time.</div>
+      <div class="chart-box short"><canvas id="walkForwardChart" aria-label="Out-of-sample fold returns for fixed EMA, training-selected EMA and buy and hold" role="img"></canvas></div>
+      <div class="metrics-table-wrap" style="margin-top:14px"><table class="metrics-table"><thead><tr><th>Fold / test dates</th><th>Training through</th><th>Selected EMA</th><th>Fixed return</th><th>Selected return</th><th>Hold return</th><th>Selected DD</th><th>Closed trades</th></tr></thead><tbody id="walkForwardBody"><tr><td colspan="8">Run validation to calculate.</td></tr></tbody></table></div>
+      <div class="notes" id="walkForwardNote">All folds reset to cash, wait for a new cross, and mark open positions at the last close. Results compare independent experiments, not a continuous live portfolio.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--violet)"></span>05 · Block-bootstrap uncertainty</div><span class="mono" id="bootstrapMeta" style="font-size:11px;color:var(--text-faint)">Later-period fixed rules</span></div>
+      <div class="validation-summary">
+        <div class="validation-card"><div class="validation-card-label">Return · central 95% range</div><div class="validation-card-value" id="bootReturn">—</div><div class="validation-card-sub">Over the sampled daily horizon</div></div>
+        <div class="validation-card"><div class="validation-card-label">Sharpe · central 95% range</div><div class="validation-card-value" id="bootSharpe">—</div><div class="validation-card-sub" id="bootSharpeSub">Annualized using 365.25 days</div></div>
+        <div class="validation-card"><div class="validation-card-label">Drawdown · 95th percentile</div><div class="validation-card-value" id="bootDrawdown">—</div><div class="validation-card-sub">Loss magnitude at daily closes</div></div>
+        <div class="validation-card"><div class="validation-card-label">Paths beating buy &amp; hold</div><div class="validation-card-value" id="bootBeatHold">—</div><div class="validation-card-sub">Paired resampling of the same dates</div></div>
+      </div>
+      <div class="chart-box short"><canvas id="bootstrapChart" aria-label="Distribution of simulated maximum daily drawdown magnitudes" role="img"></canvas></div>
+      <div class="notes" id="bootstrapNote">Contiguous daily-return blocks preserve dependence within each block. Percentile resampling diagnostics differ from PyBroker's BCa intervals and do not estimate the probability of future profit.</div>
     </div>
   </div> <!-- /tabValidation -->
 
@@ -1459,7 +1481,7 @@ const fmtSignedPct = (v, dp=2) => {
   return s+(v*100).toFixed(dp)+'%';
 };
 const fmtBTC = (v) => v==null||!isFinite(v) ? '—' : v.toLocaleString('en-US',{minimumFractionDigits:5,maximumFractionDigits:5})+' BTC';
-const ENGINE_VERSION = 'quant-3.2.0';
+const ENGINE_VERSION = 'quant-3.3.0';
 const DAY_MS = 86400000;
 const YEAR_DAYS = 365.25;
 const POLICY = Object.freeze({ minCagrDays:30, minRiskReturns:10, minRollingReturns:20, volDays:14, mvrvLagDays:1, mvrvMaxAgeDays:3 });
@@ -2435,6 +2457,7 @@ function livePreview(idx){
 let lastResult = null;
 let lastValidation = null;
 let validationStale = true;
+let validationRevision = 0;
 let rafPending = false;
 let sliderDragging = false;
 function scheduleRecompute(){
@@ -2503,9 +2526,10 @@ function validationConfigKey(cfg){
   return JSON.stringify({engine:ENGINE_VERSION,config:publicConfig(cfg),priceHash:DATA_META?.hash||null,mvrvHash:MVRV_META?.hash||null});
 }
 function markValidationStale(reason='Inputs changed.'){
-  validationStale=true;
+  validationRevision++;validationStale=true;
   const status=$('validationStatus');
   if(status){status.textContent=lastValidation?reason+' Run the checks again.':'Ready to run';status.classList.add('validation-stale');}
+  if(lastValidation){$('walkForwardMeta').textContent='STALE · run validation again';$('bootstrapMeta').textContent='STALE · run validation again';}
 }
 function validationMetricRow(label,full,earlier,later,formatter,tip=''){
   const info=tip?` <span class="info-icon" title="${escAttr(tip)}">i</span>`:'';
@@ -2572,11 +2596,133 @@ function renderValidationSuite(){
   ].map(([label,a,b,fmt,df])=>'<tr><td class="mt-label">'+label+'</td><td class="mt-val">'+fmt(a)+'</td><td class="mt-val">'+fmt(b)+'</td><td class="mt-sub">'+df(a,b)+'</td></tr>').join('');
   $('costStressNote').textContent='Base: fee '+fmtPct(cfg.feePct)+' / fill, slippage '+fmtPct(cfg.slippagePct)+' / fill, short carry '+fmtPct(cfg.shortCarryRate)+' / year. Stress: '+fmtPct(costStress.cfg.feePct)+', '+fmtPct(costStress.cfg.slippagePct)+', '+fmtPct(costStress.cfg.shortCarryRate)+'. Slippage remains embedded in execution prices.';
   renderValidationDataQuality();
+  renderResearch(v.research);
 }
+// PyBroker-inspired research; intentionally distinct from its Python/BCa implementation.
+function readResearchSettings(){
+  const integer=(id,label,min,max)=>{const n=inputNumber(id,label,min,max);if(!Number.isInteger(n))throw new Error(label+' must be an integer.');return n;};
+  return {folds:integer('inWalkFolds','Walk-forward folds',2,8),paths:integer('inBootstrapPaths','Bootstrap paths',200,3000),blockDays:integer('inBootstrapBlock','Block length',1,60),seed:integer('inBootstrapSeed','Random seed',0,4294967295)};
+}
+const researchYield=()=>new Promise(resolve=>setTimeout(resolve,0));
+function walkForwardWindows(dates,start,end,trainShare,folds){
+  if(!Number.isInteger(folds)||folds<2||folds>8||start<0||end>=dates.length||start>=end||!(trainShare>=.5&&trainShare<=.9))throw new Error('Invalid walk-forward window settings.');
+  const begin=parseTs(dates[start]).getTime(),finish=parseTs(dates[end]).getTime(),testBegin=begin+(finish-begin)*trainShare;
+  const boundaries=Array.from({length:folds},(_,i)=>lowerBound(dates,testBegin+(finish-testBegin)*i/folds));
+  const windows=boundaries.map((testStart,i)=>({trainStart:start,trainEnd:testStart-1,testStart,testEnd:i+1<folds?boundaries[i+1]-1:end}));
+  if(windows.some(w=>w.trainEnd<=start||w.testEnd<=w.testStart||daysBetween(dates[start],dates[w.trainEnd])<60||daysBetween(dates[w.testStart],dates[w.testEnd])<30))throw new Error('Walk-forward needs 60 training days and 30 days per test fold. Reduce folds or earlier-period share, or load more history.');
+  return windows;
+}
+function selectTrainingPair(candidates,configured){
+  // Candidate metrics must come exclusively from the training window.
+  const eligible=candidates.filter(c=>c.metrics.totalTrades>=3&&Number.isFinite(c.metrics.finalEquity));
+  eligible.sort((a,b)=>b.metrics.finalEquity-a.metrics.finalEquity||(Number(b.fast===configured.fast&&b.slow===configured.slow)-Number(a.fast===configured.fast&&a.slow===configured.slow))||a.fast-b.fast||a.slow-b.slow);
+  return eligible.length?{fast:eligible[0].fast,slow:eligible[0].slow,trainingTrades:eligible[0].metrics.totalTrades,fallback:false,eligible:eligible.length}:{...configured,trainingTrades:null,fallback:true,eligible:0};
+}
+async function computeWalkForward(cfg,start,end,splitPct,fastValues,slowValues,folds,progress=()=>{}){
+  const windows=walkForwardWindows(RAW.dates,start,end,splitPct,folds),rows=[];
+  for(let i=0;i<windows.length;i++){
+    const w=windows[i],candidates=[];
+    for(const fast of fastValues)for(const slow of slowValues){
+      if(fast>=slow)continue;
+      const run=computeScenario(cfg,w.trainStart,w.trainEnd,{fast,slow},{compact:true,benchmark:false});
+      candidates.push({fast,slow,metrics:run.metrics});
+      await researchYield();
+    }
+    const pair=selectTrainingPair(candidates,{fast:cfg.emaFast,slow:cfg.emaSlow});
+    const fixed=computeScenario(cfg,w.testStart,w.testEnd,undefined,{compact:true});
+    const selected=pair.fast===cfg.emaFast&&pair.slow===cfg.emaSlow?fixed:computeScenario(cfg,w.testStart,w.testEnd,pair,{compact:true,benchmark:false});
+    rows.push({fold:i+1,trainStart:RAW.dates[w.trainStart],trainEnd:RAW.dates[w.trainEnd],testStart:RAW.dates[w.testStart],testEnd:RAW.dates[w.testEnd],selectedPair:pair,fixed:{...fixed.metrics,profitFactor:fixed.metrics.profitFactor===Infinity?'Infinity':fixed.metrics.profitFactor},selected:{...selected.metrics,profitFactor:selected.metrics.profitFactor===Infinity?'Infinity':selected.metrics.profitFactor},holdReturn:fixed.bh.eq.at(-1)/cfg.initialCapital-1,fixedReturn:fixed.metrics.finalEquity/cfg.initialCapital-1,selectedReturn:selected.metrics.finalEquity/cfg.initialCapital-1});
+    progress('Walk-forward fold '+(i+1)+' / '+windows.length+' complete');await researchYield();
+  }
+  return {status:'complete',selection:'Highest training final equity; at least 3 closed training trades; ties prefer configured EMA then ascending periods.',initialTrainShare:splitPct,commonStart:RAW.dates[start],boundary:'Independent cash reset; next-close fills; no position carry; terminal mark-to-market, no forced exit fee.',rows};
+}
+function pairedDailyReturns(dates,strategy,hold,start,cfg){
+  const a=dailySeries(dates,strategy,start,cfg.initialCapital,cfg.timeframe),b=dailySeries(dates,hold,start,cfg.initialCapital,cfg.timeframe),rows=[];
+  for(let i=0;i<a.returns.length;i++){
+    if(Number.isFinite(a.returns[i])&&Number.isFinite(b.returns[i])&&a.returns[i]>=-1&&b.returns[i]>=-1)rows.push({day:a.timestamps[i],strategy:a.returns[i],hold:b.returns[i]});
+  }
+  return rows;
+}
+function percentile(values,q){
+  const a=values.filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;
+  const position=(a.length-1)*q,index=Math.floor(position);return a[index]+(a[Math.min(index+1,a.length-1)]-a[index])*(position-index);
+}
+async function blockBootstrap(rows,{paths=1000,blockDays=7,seed=42,riskFreeRate=0}={},progress=()=>{}){
+  if(!Number.isInteger(paths)||paths<1||paths>3000||!Number.isInteger(blockDays)||blockDays<1||blockDays>60||!Number.isInteger(seed)||seed<0||seed>4294967295)throw new Error('Invalid bootstrap settings.');
+  if(rows.length<60)throw new Error('Bootstrap requires at least 60 paired complete daily returns.');
+  const starts=[];
+  for(let i=0;i+blockDays<=rows.length;i++){
+    let valid=true;for(let j=0;j<blockDays;j++)if(!Number.isFinite(rows[i+j].strategy)||!Number.isFinite(rows[i+j].hold)||rows[i+j].strategy< -1||rows[i+j].hold< -1||(j&&rows[i+j].day-rows[i+j-1].day!==DAY_MS)){valid=false;break;}
+    if(valid)starts.push(i);
+  }
+  if(!starts.length)throw new Error('No contiguous daily blocks of this length. Reduce block days.');
+  let randomState=seed>>>0;
+  const random=()=>{randomState=(randomState+0x6D2B79F5)>>>0;let t=randomState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};
+  const returns=[],sharpes=[],drawdowns=[];let beatHold=0,profitable=0;
+  const rf=Math.pow(1+riskFreeRate,1/YEAR_DAYS)-1,n=rows.length;
+  for(let k=0;k<paths;k++){
+    let equity=1,holdEquity=1,peak=1,dd=0,sum=0,squares=0,count=0;
+    while(count<n){
+      const begin=starts[Math.floor(random()*starts.length)];
+      for(let j=0;j<blockDays&&count<n;j++,count++){
+        const r=rows[begin+j].strategy,excess=r-rf;equity*=1+r;holdEquity*=1+rows[begin+j].hold;peak=Math.max(peak,equity);dd=Math.max(dd,1-equity/peak);sum+=excess;squares+=excess*excess;
+      }
+    }
+    const avg=sum/n,variance=Math.max(0,(squares-sum*sum/n)/(n-1));
+    returns.push(equity-1);drawdowns.push(dd);
+    // A zero-volatility or ruined path has no meaningful Sharpe.
+    if(variance>1e-24&&equity>0)sharpes.push(avg/Math.sqrt(variance)*Math.sqrt(YEAR_DAYS));
+    if(equity>holdEquity)beatHold++;if(equity>1)profitable++;
+    if(k%25===0){progress('Bootstrap '+(k+1)+' / '+paths+' paths');await researchYield();}
+  }
+  const range=values=>({low:percentile(values,.025),median:percentile(values,.5),high:percentile(values,.975)});
+  const histogram=Array.from({length:10},(_,i)=>({low:i/10,high:(i+1)/10,count:0}));for(const d of drawdowns)histogram[Math.min(9,Math.floor(d*10))].count++;
+  return {status:'complete',method:'Paired non-circular moving-block percentile bootstrap of later-period complete UTC daily returns; blocks never cross gaps.',paths,blockDays,seed,riskFreeRate,horizonDays:n,availableBlocks:starts.length,return95:range(returns),sharpe95:range(sharpes),validSharpePaths:sharpes.length,drawdown95:percentile(drawdowns,.95),drawdown99:percentile(drawdowns,.99),beatHoldFraction:beatHold/paths,profitableFraction:profitable/paths,histogram};
+}
+async function computeResearch(cfg,start,end,splitPct,fastValues,slowValues,later,settings,progress){
+  let walkForward,bootstrap;
+  // Too little history should not discard the existing validation checks.
+  try{walkForward=await computeWalkForward(cfg,start,end,splitPct,fastValues,slowValues,settings.folds,progress);}catch(e){walkForward={status:'unavailable',reason:e.message};}
+  try{
+    const dates=RAW.dates.slice(0,later.endIndex+1),rows=pairedDailyReturns(dates,later.bt.equity,later.bh.eq,later.startIndex,cfg);
+    bootstrap=await blockBootstrap(rows,{...settings,riskFreeRate:cfg.riskFreeRate},progress);
+  }catch(e){bootstrap={status:'unavailable',reason:e.message};}
+  return {settings,walkForward,bootstrap};
+}
+function renderResearch(research){
+  if(!research)return;
+  const {walkForward:w,bootstrap:b}=research;
+  const chart=(key,id,labels,datasets,percentAxis=true)=>{
+    if(charts[key]){charts[key].destroy();charts[key]=null;}
+    if(state.activeTab!=='validation')return;
+    const color=getComputedStyle(document.body).getPropertyValue('--text-dim').trim();
+    charts[key]=new Chart($(id).getContext('2d'),{type:'bar',data:{labels,datasets},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(percentAxis?c.parsed.y.toFixed(2)+'%':c.parsed.y+' paths')}}},scales:{x:{ticks:{color},grid:{display:false}},y:{ticks:{color,callback:v=>v+(percentAxis?'%':'')},grid:{color:'rgba(128,128,128,.12)'}}}}});
+  };
+  if(w.status==='complete'){
+    $('walkForwardMeta').textContent=w.rows.length+' chronological folds · train-only selection';
+    $('walkForwardBody').innerHTML=w.rows.map(r=>'<tr><td>'+r.fold+' · '+escAttr(r.testStart.slice(0,10))+' → '+escAttr(r.testEnd.slice(0,10))+'</td><td>'+escAttr(r.trainEnd.slice(0,10))+'</td><td>'+r.selectedPair.fast+'/'+r.selectedPair.slow+(r.selectedPair.fallback?' · fallback':'')+'</td><td class="mt-val">'+fmtSignedPct(r.fixedReturn)+'</td><td class="mt-val">'+fmtSignedPct(r.selectedReturn)+'</td><td class="mt-val">'+fmtSignedPct(r.holdReturn)+'</td><td class="mt-val">'+fmtPct(r.selected.maxDrawdown)+'</td><td class="mt-val">'+r.selected.totalTrades+'</td></tr>').join('');
+    $('walkForwardNote').textContent=w.selection+' Each fold resets to cash and waits for a new cross; open positions use terminal mark-to-market. No boundary liquidation cost or continuous portfolio is simulated. This validates the selection procedure; manual choices of neighborhood, split and rules can still overfit. '+w.rows.filter(r=>r.selectedPair.fallback).length+' folds used the configured pair because no candidate met the trade minimum.';
+    chart('walkForward','walkForwardChart',w.rows.map(r=>'Fold '+r.fold),[{label:'Fixed EMA',data:w.rows.map(r=>r.fixedReturn*100),backgroundColor:'#58a6ff'},{label:'Training-selected EMA',data:w.rows.map(r=>r.selectedReturn*100),backgroundColor:'#b48ff0'},{label:'Buy & hold',data:w.rows.map(r=>r.holdReturn*100),backgroundColor:'#8b96a5'}]);
+  }else{
+    $('walkForwardMeta').textContent='Unavailable';$('walkForwardBody').innerHTML='<tr><td colspan="8">'+escAttr(w.reason)+'</td></tr>';if(charts.walkForward){charts.walkForward.destroy();charts.walkForward=null;}
+  }
+  if(b.status==='complete'){
+    const range=(r,fmt)=>fmt(r.low)+' → '+fmt(r.high);
+    $('bootstrapMeta').textContent=b.paths+' paths · '+b.horizonDays+' sampled days · '+b.blockDays+'d blocks · seed '+b.seed;
+    $('bootReturn').textContent=range(b.return95,fmtSignedPct);$('bootSharpe').textContent=range(b.sharpe95,v=>Number.isFinite(v)?v.toFixed(2):'—');$('bootSharpeSub').textContent=b.validSharpePaths+'/'+b.paths+' valid Sharpe paths · 365.25 days/yr';
+    $('bootDrawdown').textContent=fmtPct(b.drawdown95);$('bootBeatHold').textContent=fmtPct(b.beatHoldFraction);
+    $('bootstrapNote').textContent='Later-period fixed-rule returns after modeled costs. '+b.availableBlocks+' contiguous source blocks; missing and partial days excluded, blocks never cross gaps. Central percentile ranges use the sampled '+b.horizonDays+'-day horizon, not calendar CAGR. Drawdown is measured at daily closes; 99th percentile '+fmtPct(b.drawdown99)+'. Resampled paths are diagnostics, not future probabilities. This differs from PyBroker BCa intervals.';
+    chart('bootstrap','bootstrapChart',b.histogram.map(h=>Math.round(h.low*100)+'–'+Math.round(h.high*100)+'%'),[{label:'Max daily drawdown',data:b.histogram.map(h=>h.count),backgroundColor:'#b48ff0'}],false);
+  }else{
+    $('bootstrapMeta').textContent='Unavailable';$('bootstrapNote').textContent=b.reason;for(const id of ['bootReturn','bootSharpe','bootDrawdown','bootBeatHold'])$(id).textContent='—';if(charts.bootstrap){charts.bootstrap.destroy();charts.bootstrap=null;}
+  }
+}
+
 async function runValidationSuite(){
   const btn=$('runValidationBtn'),status=$('validationStatus');
   if(DATA_PENDING||!RAW.dates.length){if(status)status.textContent='Wait for data to finish loading.';return;}
-  btn.disabled=true;btn.textContent='Running…';status.textContent='Running 3 deterministic checks…';status.classList.remove('validation-stale');
+  const revision=validationRevision;
+  btn.disabled=true;btn.textContent='Running…';status.textContent='Running validation…';status.classList.remove('validation-stale');
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   try{
     const cfg=readConfig(),end=RAW.dates.length-1,warmup=Math.max(cfg.emaFast,cfg.emaSlow)-1,userStart=lowerBound(RAW.dates,cfg.startDate),start=Math.max(warmup,userStart),splitPct=inputNumber('inValidationSplit','Earlier-period share (%)',50,90)/100;
@@ -2596,10 +2742,14 @@ async function runValidationSuite(){
     const validCells=cells.filter(c=>c.valid),positive=validCells.filter(c=>Number.isFinite(c.run.metrics.cagr)&&c.run.metrics.cagr>0).length;
     const multiplier=inputNumber('inCostStress','Cost stress multiplier',1,10),stressCfg={...cfg,executionPreset:'stress_'+multiplier.toFixed(1)+'x',feePct:Math.min(.1,cfg.feePct*multiplier),slippagePct:Math.min(.05,cfg.slippagePct*multiplier),shortCarryRate:Math.min(1,cfg.shortCarryRate*multiplier)};
     const stressed=computeScenario(stressCfg,start,end);
-    lastValidation={key,cfg,splitPct,splitIndex,full,earlier,later,sensitivity:{pct,fastValues,slowValues,cells,valid:validCells.length,positive,commonStartIndex},costStress:{multiplier,cfg:stressCfg,stressed},generatedAt:new Date().toISOString()};
+    const settings=readResearchSettings();
+    status.textContent='Walk-forward · selecting on earlier data only…';
+    const research=await computeResearch(cfg,commonStartIndex,end,splitPct,fastValues,slowValues,later,settings,message=>status.textContent=message);
+    if(revision!==validationRevision||key!==validationConfigKey(readConfig())||JSON.stringify(settings)!==JSON.stringify(readResearchSettings())||splitPct!==inputNumber('inValidationSplit','Earlier-period share (%)',50,90)/100||pct!==inputNumber('inSensitivityPct','EMA neighborhood (%)',5,50)/100||multiplier!==inputNumber('inCostStress','Cost stress multiplier',1,10))throw new Error('Inputs changed during validation. Run again.');
+    lastValidation={research,key,cfg,splitPct,splitIndex,full,earlier,later,sensitivity:{pct,fastValues,slowValues,cells,valid:validCells.length,positive,commonStartIndex},costStress:{multiplier,cfg:stressCfg,stressed},generatedAt:new Date().toISOString()};
     validationStale=false;renderValidationSuite();status.textContent='Validated '+new Date().toLocaleTimeString('en-US',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'})+' UTC';
   }catch(error){status.textContent='Validation unavailable: '+error.message;status.classList.add('validation-stale');console.error(error);}
-  finally{btn.disabled=false;btn.textContent='Run 3 validation checks';}
+  finally{btn.disabled=false;btn.textContent='Run 5 validation checks';}
 }
 function recompute(){
   if(DATA_PENDING)return false;
@@ -4105,7 +4255,7 @@ function wireEvents(){
     $(id).addEventListener('input', ()=>{if(id==='inFee'||id==='inSlippage')markExecutionCustom();markValidationStale('Backtest inputs changed.');clearTimeout(t);t=setTimeout(recompute,260);});
   });
 
-  ['inValidationSplit','inSensitivityPct','inCostStress'].forEach(id=>$(id).addEventListener('input',()=>markValidationStale('Validation settings changed.')));
+  ['inValidationSplit','inSensitivityPct','inCostStress','inWalkFolds','inBootstrapPaths','inBootstrapBlock','inBootstrapSeed'].forEach(id=>$(id).addEventListener('input',()=>markValidationStale('Validation settings changed.')));
   $('runValidationBtn').addEventListener('click',runValidationSuite);
 
   ['inDeltaStrikePct','inDeltaDte','inDeltaIv','inDeltaQuantity'].forEach(id=>{
@@ -4204,7 +4354,7 @@ function wireEvents(){
     $('pageTabAnalysisBtn').setAttribute('aria-selected', isAnalysis);
     $('pageTabValidationBtn').setAttribute('aria-selected', isValidation);
     if(isAnalysis)renderAnalysisTab();
-    if(isValidation){renderValidationDataQuality();if(lastValidation)renderValidationSuite();}
+    if(isValidation){renderValidationDataQuality();if(lastValidation){renderValidationSuite();if(validationStale)markValidationStale();}}
   }
   $('pageTabBacktestBtn').addEventListener('click', ()=> setActiveTab('backtest'));
   $('pageTabAnalysisBtn').addEventListener('click', ()=> setActiveTab('analysis'));
@@ -4258,6 +4408,7 @@ function wireEvents(){
       renderRealizedPnlChart(); renderUnderwaterHeatmap();
     }
     if (state.activeTab === 'analysis') renderAnalysisTab();
+    if (state.activeTab === 'validation' && lastValidation) renderResearch(lastValidation.research);
   });
 
   window.addEventListener('resize', ()=>{
@@ -4383,6 +4534,7 @@ function buildRunManifest(){
   if(validationMatches){
     validation={
       status:'current',generatedAt:lastValidation.generatedAt,splitPct:lastValidation.splitPct,
+      research:lastValidation.research,
       full:scenarioManifest(lastValidation.full),earlier:scenarioManifest(lastValidation.earlier),later:scenarioManifest(lastValidation.later),
       sensitivity:{pct:lastValidation.sensitivity.pct,commonStart:RAW.dates[lastValidation.sensitivity.commonStartIndex],positiveCagr:lastValidation.sensitivity.positive,validPairs:lastValidation.sensitivity.valid,cells:lastValidation.sensitivity.cells.map(cell=>cell.valid?{fast:cell.fast,slow:cell.slow,current:cell.current,metrics:metricSnapshot(cell.run.metrics)}:{fast:cell.fast,slow:cell.slow,current:cell.current,valid:false})},
       costStress:{multiplier:lastValidation.costStress.multiplier,config:publicConfig(lastValidation.costStress.cfg),result:scenarioManifest(lastValidation.costStress.stressed)}
@@ -4492,7 +4644,7 @@ async function boot(){
 }
 const engineTestHooks=globalThis.__BTC_EMA_TEST__?{
   setTestData(data){RAW={dates:Array.from(data.dates),prices:Array.from(data.prices),mvrv:Array.from(data.mvrv||new Array(data.dates.length).fill(null))};state.timeframe=data.timeframe||'1d';},
-  computeScenario,neighborhoodValues,buildHistoricalDeltaCase
+  prepareTestRun(){lastResult=computeRun(readConfig());},buildRunManifest,runValidationSuite,computeScenario,neighborhoodValues,buildHistoricalDeltaCase,walkForwardWindows,selectTrainingPair,blockBootstrap,pairedDailyReturns,computeWalkForward
 }:{};
 globalThis.BtcEmaEngine=Object.freeze({
   version:ENGINE_VERSION,parseTs,computeEMA,computeEMAFrom,generateSignals,runBacktest,buyAndHoldEquity,
@@ -4572,3 +4724,4 @@ if(!globalThis.__BTC_EMA_TEST__)boot();
 </script>
 </body>
 </html>
+
