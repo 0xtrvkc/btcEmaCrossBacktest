@@ -11,7 +11,7 @@ The app runs entirely in the browser. It fetches public BTC close and MVRV data,
 The research workflow was strengthened using the parts of [QuantDinger](https://github.com/OpenByteInc/QuantDinger) that fit a focused static backtester:
 
 - explicit Exploration, Live-aligned, and Custom execution-cost presets;
-- a Validation tab with chronological holdout, EMA-neighborhood sensitivity, and execution-cost stress checks;
+- a Validation tab with chronological holdout, EMA-neighborhood sensitivity, execution-cost stress, expanding walk-forward selection, and paired block-bootstrap diagnostics;
 - a versioned JSON run manifest containing settings, assumptions, results, trades, source URLs, and dataset hashes;
 - an Options Delta Lab that maps configurable call/put delta estimates to the selected entry date and every historical EMA entry;
 - deterministic engine tests and a Node.js 24 GitHub Actions workflow;
@@ -92,6 +92,32 @@ A broad region of similar results is more reassuring than one isolated winning p
 - Compares final equity, CAGR, maximum drawdown, Sharpe, and explicit fees plus carry.
 
 Slippage is a scenario assumption embedded in execution prices. It is not reconstructed from historical spreads or an order book.
+
+### 4. Expanding walk-forward selection
+
+Inspired by [PyBroker walk-forward analysis](https://www.pybroker.com/en/latest/notebooks/6.%20Training%20a%20Model.html), implemented locally in the existing JavaScript engine.
+
+- Initial training uses the earlier-period share (70% by default). Divide the remaining elapsed time into 2–8 chronological test folds (default 4).
+- Rank valid pairs in the existing 3×3 EMA neighborhood by **training final equity after modeled costs**. A common start and initial capital make candidates comparable. Only candidates with at least 3 closed training trades qualify. Ties prefer the configured pair, then ascending periods.
+- Freeze the selected pair for the next fold. Later folds expand training to include all earlier data. Selection cannot use the current fold's prices.
+- Compare fixed EMA, training-selected EMA, and buy-and-hold fold returns in a chart and detailed table. The configured strategy is never automatically changed.
+- If no candidate qualifies, use the configured pair and label the fallback. Require 60 elapsed training days and 30 test days per fold; show a reason when history is insufficient.
+
+Each fold starts in cash and waits for a new crossover. Indicators retain causal earlier history, but positions and pending orders do not cross fold boundaries. Terminal open positions are marked to market without an exit fee. These independent experiments are not a continuous portfolio and their returns are not stitched into a live-trading CAGR. Manual choice of rules, neighborhood and split can still introduce research overfitting.
+
+### 5. Paired moving-block bootstrap
+
+Inspired by [PyBroker bootstrap evaluation](https://www.pybroker.com/en/latest/notebooks/3.%20Evaluating%20with%20Bootstrap%20Metrics.html). This browser implementation uses **percentile moving-block resampling**, not PyBroker's BCa method.
+
+- Sample the later-period **fixed-rule** strategy's complete UTC daily returns after modeled costs; require at least 60 paired strategy/benchmark observations.
+- Resample contiguous blocks (default 7 days), with 200–3,000 paths (default 1,000) and a deterministic seed (default 42). Blocks never bridge missing dates or wrap from the dataset end to its beginning. A gap or segment shorter than the block length cannot contribute a full block.
+- Use the same sampled dates for strategy and buy-and-hold. Show the fraction of resampled paths with strictly higher strategy wealth; ties do not count as wins.
+- Report central 95% percentile ranges for compounded return and annualized Sharpe, plus the 95th and 99th percentiles of maximum daily-close drawdown loss magnitude. The histogram shows the drawdown distribution.
+- The horizon is the number of valid paired daily observations, not elapsed calendar time. Returns are cumulative over this sampled horizon, not CAGR. Zero-volatility and ruined paths have undefined Sharpe; disclose valid Sharpe path count.
+
+Blocks retain dependence within each block; they do not preserve whole cycles or establish future probabilities. Short samples, block-length choice and nonstationarity affect results. Daily drawdown can understate intraday loss. Open P&L is included in daily equity, but resampling does not replay orders or reconstruct spreads.
+
+Click **Run 5 validation checks** to populate both panels. Changes mark results stale; input changes during asynchronous research discard the new run. Run JSON includes settings, boundaries, selections, metrics and bootstrap summaries only when validation is current. Insufficient history for a new diagnostic leaves the other checks available.
 
 ## Options Delta Lab
 
@@ -176,7 +202,7 @@ Use **Run JSON** in the header or Validation tab. Each export includes:
 - the complete Kelly sizing diagnostic and bootstrap range;
 - costs, open position, and closed trade records;
 - delta model convention, assumptions, selected-entry snapshot, and historical cases;
-- current validation results, or a stale/not-run status.
+- current validation results, including walk-forward fold boundaries/selections and bootstrap method, seed, block length, path count and percentile summaries, or a stale/not-run status.
 
 The source hash makes it possible to tell whether two apparently identical runs used identical fetched bytes.
 
@@ -234,3 +260,4 @@ tests/engine.test.mjs              Deterministic engine contract tests
 ## Disclaimer
 
 For research and education only. Historical and simulated results are not investment advice and do not guarantee future performance.
+
